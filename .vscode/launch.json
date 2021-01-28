@@ -1,0 +1,21 @@
+﻿{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "showDevDebugOutput": false,
+            "name": "CortexDebug",
+            "cwd": "${workspaceRoot}/openocd",
+            "preLaunchTask": "MakeRX",
+            "executable": "${workspaceRoot}/output/rx.elf",
+            "svdFile": "${workspaceRoot}/openocd/STM32F0x1.svd",
+            "request": "launch",
+            "type": "cortex-debug",
+            "servertype": "openocd",
+            "serverpath": "C:/Program Files/Git/mingw64/bin/openocd.exe",
+            "configFiles": [
+                "stlink.cfg",
+                "stm32f0x.cfg"
+            ]
+        }
+    ]
+}
