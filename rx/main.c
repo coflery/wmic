@@ -35,22 +35,19 @@ int main(void)
     radio_power(RF2, ENABLE);
     delay_ms(50);
 
-    res = init_rx();
+    init_rx();
+    res = spdif_init();
     if (res == 0)
     {
-        led_control(LED2, ENABLE);
+        led_control(LED1, ENABLE);
         delay_ms(500);
     }
-    led_control(LED2, DISABLE);
+    led_control(LED1, DISABLE);
+    delay_ms(500);
     // hw_i2c_config();
     // nvic_config();
     while (1)
     {
-        res = spdif_init();
-        led_control(LED1, res == 0);
-        delay_ms(250);
-        led_control(LED1, DISABLE);
-
         res = fm_init();
         led_control(LED2, res == 0);
         delay_ms(250);

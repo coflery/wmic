@@ -49,26 +49,16 @@ uint8_t SPDIF_I2C_Write(uint8_t reg, const uint8_t *pBuf, uint8_t len);
 uint8_t spdif_init(void)
 {
   uint8_t res;
-  // uint8_t val;
-  // res = SPDIF_I2C_Read(0x00, &val);
-  // if (res)
-  //   return 1;
-  // if (val != 0x05)
-  //   return 2;
+  res = SPDIF_I2C_Write(0, wm8804_reg_defs, sizeof(wm8804_reg_defs));
+  if (res)
+    return 1;
 
+  uint8_t x[sizeof(wm8804_reg_defs)];
   for (uint8_t i = 0; i < sizeof(wm8804_reg_defs); i++)
   {
-    res = SPDIF_I2C_Write(0, wm8804_reg_defs, sizeof(wm8804_reg_defs));
+    res = SPDIF_I2C_Read(i, &x[i]);
     if (res)
-      return 3;
-  }
-
-  uint8_t x[10];
-  for(uint8_t i=0;i<10;i++)
-  {
-    uint8_t res = SPDIF_I2C_Read(i, &x[i]);
-    if (res)
-      return 4;
+      return 2;
   }
 
   return 0;
@@ -119,7 +109,7 @@ END:
   return res;
 }
 
-uint8_t SPDIF_I2C_Write(uint8_t reg,const uint8_t *pBuf, uint8_t len)
+uint8_t SPDIF_I2C_Write(uint8_t reg, const uint8_t *pBuf, uint8_t len)
 {
   uint8_t res = 0;
 

@@ -36,7 +36,7 @@ int main()
     init_tx();
 
     GPIO_SetBits(GPIOA, GPIO_Pin_0);
-    GPIO_ResetBits(GPIOA, GPIO_Pin_1);
+    GPIO_ResetBits(GPIOA, GPIO_Pin_6);
     while (!GPIO_ReadInputDataBit(GPIOF, GPIO_Pin_1));
 
     while (1)
@@ -56,6 +56,7 @@ int main()
                 {
                     tx_power(DISABLE);
                     GPIO_ResetBits(GPIOA, GPIO_Pin_0);
+                    while (!GPIO_ReadInputDataBit(GPIOF, GPIO_Pin_1));
                     //开启芯片电源管理的时钟
                     RCC_APB1PeriphClockCmd(RCC_APB1Periph_PWR, ENABLE);
                     //进入停止（stop）模式，选择低压调节器（这样启动会慢一些，当然功耗会更低），启用外部中断唤醒。

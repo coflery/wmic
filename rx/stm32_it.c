@@ -192,6 +192,7 @@ void EXTI4_15_IRQHandler(void)
   {
     /* Clear the EXTI line 3 pending bit */
     EXTI_ClearITPendingBit(EXTI_Line5);
+    NVIC_SystemReset();
   }
   if (EXTI_GetITStatus(EXTI_Line6) != RESET)
   {
