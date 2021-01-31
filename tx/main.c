@@ -58,9 +58,9 @@ int main()
                     GPIO_ResetBits(GPIOA, GPIO_Pin_0);
                     while (!GPIO_ReadInputDataBit(GPIOF, GPIO_Pin_1));
                     //开启芯片电源管理的时钟
-                    RCC_APB1PeriphClockCmd(RCC_APB1Periph_PWR, ENABLE);
+                    //RCC_APB1PeriphClockCmd(RCC_APB1Periph_PWR, ENABLE);
                     //进入停止（stop）模式，选择低压调节器（这样启动会慢一些，当然功耗会更低），启用外部中断唤醒。
-                    PWR_EnterSTOPMode(PWR_Regulator_LowPower, PWR_STOPEntry_WFI);
+                    //PWR_EnterSTOPMode(PWR_Regulator_LowPower, PWR_STOPEntry_WFI);
                     NVIC_SystemReset();
                 }
             }

@@ -6,12 +6,6 @@
             "includePath": [
                 "${workspaceFolder}/**"
             ],
-            "defines": [
-                "STM32F0XX_LD",
-                "_DEBUG",
-                "UNICODE",
-                "_UNICODE"
-            ],
             "forcedInclude": [
                 "${workspaceFolder}/libs/spl/stm32f0xx_conf.h"
             ],

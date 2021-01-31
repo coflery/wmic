@@ -4,62 +4,124 @@
 #include "spdif.h"
 #include "i2c.h"
 #include "gpio.h"
+#include "bitmap.h"
 
 #define I2C_PORT I2C_PORT1
 #define I2C_ADDRESS 0x74
 #define TIMEOUT ((uint8_t)20)
 
-static const uint8_t wm8804_reg_defs[] = {
-    0x05, /* R0  - RST/DEVID1 */
-    0x88, /* R1  - DEVID2 */
-    0x04, /* R2  - DEVREV */
-    0x21, /* R3  - PLL1 */
-    0xFD, /* R4  - PLL2 */
-    0x36, /* R5  - PLL3 */
-    0x07, /* R6  - PLL4 */
-    0x16, /* R7  - PLL5 */
-    0x18, /* R8  - PLL6 */
-    0xFF, /* R9  - SPDMODE */
-    0x00, /* R10 - INTMASK */
-    0x00, /* R11 - INTSTAT */
-    0x00, /* R12 - SPDSTAT */
-    0x00, /* R13 - RXCHAN1 */
-    0x00, /* R14 - RXCHAN2 */
-    0x00, /* R15 - RXCHAN3 */
-    0x00, /* R16 - RXCHAN4 */
-    0x00, /* R17 - RXCHAN5 */
-    0x00, /* R18 - SPDTX1 */
-    0x00, /* R19 - SPDTX2 */
-    0x00, /* R20 - SPDTX3 */
-    0x71, /* R21 - SPDTX4 */
-    0x0B, /* R22 - SPDTX5 */
-    0x70, /* R23 - GPO0 */
-    0x57, /* R24 - GPO1 */
-    0x00, /* R25 */
-    0x42, /* R26 - GPO2 */
-    0x06, /* R27 - AIFTX */
-    0x06, /* R28 - AIFRX */
-    0x80, /* R29 - SPDRX1 */
-    0x07, /* R30 - PWRDN */
-};
+// static const uint8_t wm8804_reg_defs[] = {
+//     0x05, /* R0  - RST/DEVID1 */
+//     0x88, /* R1  - DEVID2 */
+//     0x04, /* R2  - DEVREV */
+//     0x21, /* R3  - PLL1 */
+//     0xFD, /* R4  - PLL2 */
+//     0x36, /* R5  - PLL3 */
+//     0x07, /* R6  - PLL4 */
+//     0x16, /* R7  - PLL5 */
+//     0x18, /* R8  - PLL6 */
+//     0xFF, /* R9  - SPDMODE */
+//     0x00, /* R10 - INTMASK */
+//     0x00, /* R11 - INTSTAT */
+//     0x00, /* R12 - SPDSTAT */
+//     0x00, /* R13 - RXCHAN1 */
+//     0x00, /* R14 - RXCHAN2 */
+//     0x00, /* R15 - RXCHAN3 */
+//     0x00, /* R16 - RXCHAN4 */
+//     0x00, /* R17 - RXCHAN5 */
+//     0x00, /* R18 - SPDTX1 */
+//     0x00, /* R19 - SPDTX2 */
+//     0x00, /* R20 - SPDTX3 */
+//     0x71, /* R21 - SPDTX4 */
+//     0x0B, /* R22 - SPDTX5 */
+//     0x70, /* R23 - GPO0 */
+//     0x57, /* R24 - GPO1 */
+//     0x00, /* R25 */
+//     0x42, /* R26 - GPO2 */
+//     0x06, /* R27 - AIFTX */
+//     0x06, /* R28 - AIFRX */
+//     0x80, /* R29 - SPDRX1 */
+//     0x07, /* R30 - PWRDN */
+// };
 
 uint8_t SPDIF_I2C_Read(uint8_t reg, uint8_t *pBuf);
-uint8_t SPDIF_I2C_Write(uint8_t reg, const uint8_t *pBuf, uint8_t len);
+uint8_t SPDIF_I2C_Write(uint8_t reg, uint8_t data);
 
 uint8_t spdif_init(void)
 {
-  uint8_t res;
-  res = SPDIF_I2C_Write(0, wm8804_reg_defs, sizeof(wm8804_reg_defs));
-  if (res)
+  uint8_t i;
+  uint8_t res = 0;
+  uint8_t deviceID_L, deviceID_H;
+  uint8_t devREV;
+
+  for (i = 0; i < TIMEOUT; i++,res=0)
+  {
+    delay_ms(20);
+    res += SPDIF_I2C_Read(0, &deviceID_L);
+    res += SPDIF_I2C_Read(1, &deviceID_H);
+    res += SPDIF_I2C_Read(2, &devREV);
+    if (res)
+      continue;
+    break;
+  }
+  if (i == TIMEOUT)
     return 1;
 
-  uint8_t x[sizeof(wm8804_reg_defs)];
-  for (uint8_t i = 0; i < sizeof(wm8804_reg_defs); i++)
-  {
-    res = SPDIF_I2C_Read(i, &x[i]);
-    if (res)
-      return 2;
-  }
+  if (0x8805 != (deviceID_H << 8 | deviceID_L))
+    return 2;
+
+  res += SPDIF_I2C_Write(0, 0x00); //Reset device
+
+  // REGISTER 7
+  // bit 7:6 - always 0
+  // bit 5:4 - CLKOUT divider select => 00 = 512 fs, 01 = 256 fs, 10 = 128 fs, 11 = 64 fs
+  // bit 3 - MCLKDIV select => 0
+  // bit 2 - FRACEN => 1
+  // bit 1:0 - FREQMODE (is written by S/PDIF receiver) => 00
+  res += SPDIF_I2C_Write(7, B00000100);
+
+  // REGISTER 8
+  // set clock outputs and turn off last data hold
+  // bit 7 - MCLK output source select is CLK2 => 0
+  // bit 6 - always valid => 0
+  // bit 5 - fill mode select => 1 (we need to see errors when they happen)
+  // bit 4 - CLKOUT pin disable => 1
+  // bit 3 - CLKOUT pin select is CLK1 => 0
+  // bit 2:0 - always 0
+  res += SPDIF_I2C_Write(8, B00110000);
+
+  // set masking for interrupts
+  res += SPDIF_I2C_Write(10, 126); // 1+2+3+4+5+6 => 0111 1110. We only care about unlock and rec_freq
+
+  // set the AIF TX
+  // bit 7:6 - always 0
+  // bit   5 - LRCLK polarity => 0
+  // bit   4 - BCLK invert => 0
+  // bit 3:2 - data word length => 10 (24b) or 00 (16b)
+  // bit 1:0 - format select: 11 (dsp), 10 (i2s), 01 (LJ), 00 (RJ)
+  res += SPDIF_I2C_Write(27, B00000001);
+
+  // set the AIF RX
+  // bit   7 - SYNC => 1
+  // bit   6 - master mode => 1
+  // bit   5 - LRCLK polarity => 0
+  // bit   4 - BCLK invert => 0
+  // bit 3:2 - data word length => 10 (24b) or 00 (16b)
+  // bit 1:0 - format select: 11 (dsp), 10 (i2s), 01 (LJ), 00 (RJ)
+  res += SPDIF_I2C_Write(28, B11001001);
+
+  // set PLL K and N factors
+  // this should be sample rate dependent, but makes hardly any difference
+  res += SPDIF_I2C_Write(6, 7);   // set PLL_N to 7
+  res += SPDIF_I2C_Write(5, 0x36); // set PLL_K to 36FD21 (36)
+  res += SPDIF_I2C_Write(4, 0xFD); // set PLL_K to 36FD21 (FD)
+  res += SPDIF_I2C_Write(3, 0x21); // set PLL_K to 36FD21 (21)
+
+  // power up device
+  res += SPDIF_I2C_Write(30, 0);
+
+  if (res)
+    return 3;
 
   return 0;
 }
@@ -109,7 +171,7 @@ END:
   return res;
 }
 
-uint8_t SPDIF_I2C_Write(uint8_t reg, const uint8_t *pBuf, uint8_t len)
+uint8_t SPDIF_I2C_Write(uint8_t reg, uint8_t data)
 {
   uint8_t res = 0;
 
@@ -132,16 +194,12 @@ uint8_t SPDIF_I2C_Write(uint8_t reg, const uint8_t *pBuf, uint8_t len)
     goto END;
   }
 
-  /* Send data bytes to write */
-  for (uint8_t i = 0; i < len; i++)
+  /* Send data byte to write */
+  I2C_WriteByte(I2C_PORT, data);
+  if (I2C_CheckAck(I2C_PORT) == NACK)
   {
-    I2C_WriteByte(I2C_PORT, *pBuf);
-    if (I2C_CheckAck(I2C_PORT) == NACK)
-    {
-      res = 3;
-      goto END;
-    }
-    pBuf++;
+    res = 3;
+    goto END;
   }
 
 END:

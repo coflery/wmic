@@ -17,4 +17,6 @@ void exti_init(void);
 void radio_power(uint8_t group, bool Enable);
 void led_control(uint8_t led, bool Enable);
 
+void button_reset(void);
+
 #endif

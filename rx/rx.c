@@ -41,7 +41,7 @@ static uint8_t rx_reg_val[53][4] =
         {0x50, 0x88, 0x00, 0x44}, //REG4
         {0x00, 0x28, 0x03, 0x80}, //REG5
         {0x5B, 0xED, 0xFB, 0x00}, //REG6
-        {0x1C, 0xAE, 0xC5, 0xAA}, //REG7		[23]=1 Enable XO2=12.288 output;[19:17]=b010 for VHF;[19:17]=b111 for UHF
+        {0x1C, 0x2E, 0xC5, 0xAA}, //REG7		[23]=1 Enable XO2=12.288 output;[19:17]=b010 for VHF;[19:17]=b111 for UHF
         {0xEF, 0xF1, 0x19, 0x4C}, //REG8
         {0x08, 0x51, 0x13, 0xA2}, //REG9		[2]=0 for 48kHz;[2]=1 for 28kHz
         {0x00, 0x6F, 0x00, 0x6F}, //REGA
@@ -56,21 +56,21 @@ static uint8_t rx_reg_val[53][4] =
         {0x41, 0x1E, 0x14, 0x7B}, //REG1B		800.000MHz;0x404DBF25 for 790.000MHz
         {0x00, 0x07, 0xFC, 0xFA}, //REG1C		[20]=1 enable analog output;[18]=0 enable freq-shift for anti-howling;[17:10] for enable EQ
         {0x4E, 0x00, 0x4D, 0x00}, //REG1D		RSSI info at GPIO3;[31:16] for high threshold;[15:0] for low threshold
-        {0x00, 0x00, 0x00, 0x00}, //REG1E 		|
-        {0x00, 0x00, 0x00, 0x00}, //REG1F 		|
-        {0x00, 0x00, 0x00, 0x00}, //REG20 		|
+        {0x00, 0x00, 0x00, 0x00}, //REG1E		|
+        {0x00, 0x00, 0x00, 0x00}, //REG1F		|
+        {0x00, 0x00, 0x00, 0x00}, //REG20		|
         {0x00, 0x00, 0x00, 0x00}, //REG21		|
-        {0x00, 0x00, 0x00, 0x00}, //REG22		|                  **************           ***************
+        {0x00, 0x00, 0x00, 0x00}, //REG22		|                  * * * * * * * *          * * * * * * * *
         {0x00, 0x00, 0x00, 0x00}, //REG23		|                  *                        *             *
         {0x00, 0x00, 0x00, 0x00}, //REG24		|                  *                        *             *
         {0x00, 0x00, 0x00, 0x00}, //REG25		|                  *                        *             *
-        {0x00, 0x00, 0x00, 0x00}, //REG26		|     ---->        **************           *             *
+        {0x00, 0x00, 0x00, 0x00}, //REG26		|     ---->        * * * * * * * *          *             *
         {0x00, 0x00, 0x00, 0x00}, //REG27		|                  *                        *       *     *
         {0x00, 0x00, 0x00, 0x00}, //REG28		|                  *                        *         *   *
         {0x00, 0x00, 0x00, 0x00}, //REG29		|                  *                        *           * *
-        {0x00, 0x00, 0x00, 0x00}, //REG2A		|                  **************           ***************
-        {0x00, 0x00, 0x00, 0x00}, //REG2B		|                                                          *
-        {0x00, 0x00, 0x00, 0x00}, //REG2C		|                                                            *
+        {0x00, 0x00, 0x00, 0x00}, //REG2A		|                  * * * * * * * *          * * * * * * * *
+        {0x00, 0x00, 0x00, 0x00}, //REG2B		|                                                           *
+        {0x00, 0x00, 0x00, 0x00}, //REG2C		|                                                             *
         {0x00, 0x00, 0x00, 0x00}, //REG2D		|
         {0x00, 0x00, 0x00, 0x00}, //REG2E		|
         {0x00, 0x00, 0x00, 0x00}, //REG2F		|
@@ -82,9 +82,9 @@ static uint8_t rx_reg_val[53][4] =
         {0x00, 0x00, 0x00, 0x00}, //REG35		[31:0] FIFO received data,read 12 times total 12*32=384bit
         {0x01, 0x46, 0x02, 0x00}, //REG36		updated,150708 CRC ERROR VERIFY
         {0x90, 0xF6, 0xAA, 0x29}, //REG37		[23:20]LNA Gain VHF:0xD,UHF:0xF;[7:0]RF threshold for AGC and auto select of dual-ant
-        {0x3F, 0x80, 0x1E, 0x07}, //REG38
-        {0x48, 0x48, 0x48, 0x48}, //REG39		all gpio pins in 2nd function
-        {0x00, 0x00, 0x00, 0x48}, //REG3A		gpio pin in 2nd function
+        {0x3F, 0x80, 0x1E, 0x05}, //REG38   [1]=0PCM at slave mode;[1]=1PCM at master mode
+        {0x40, 0x40, 0x40, 0x40}, //REG39		gpio(0-3) in second alternate function
+        {0x00, 0x00, 0x00, 0x40}, //REG3A		gpio(4) in second alternate function
         {0x00, 0x78, 0x64, 0x00}, //REG3B
         {0x00, 0x00, 0x06, 0xD3}, //REG3C		[23:0]=(Fshift*2^24/fsamplerate)freeq-shift at up 5Hz,enable it set REG1C[18]=0
 };
@@ -104,7 +104,7 @@ uint8_t init_rx(void)
       continue;
     break;
   }
-  if (i == TIMEOUT) //通信超时
+  if (i == TIMEOUT)
     return 1;
 
   for (i = 0; i <= 52; i++)

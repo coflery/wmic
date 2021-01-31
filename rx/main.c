@@ -30,10 +30,10 @@ int main(void)
 
     radio_power(RF1 | RF2, DISABLE);
     delay_ms(50);
-    radio_power(RF1, ENABLE);
+    radio_power(RF1 | RF2, ENABLE);
     delay_ms(50);
-    radio_power(RF2, ENABLE);
-    delay_ms(50);
+
+    button_reset();
 
     init_rx();
     res = spdif_init();

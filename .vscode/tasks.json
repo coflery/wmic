@@ -17,7 +17,6 @@
                 "reveal": "silent"
             },
             "problemMatcher": {
-                //"owner": "cpp",
                 "base": "$gcc",
                 "fileLocation": [
                     "relative",

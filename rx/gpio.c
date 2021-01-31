@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <stm32f0xx.h>
 #include "gpio.h"
+#include "delay.h"
 
 void gpio_init()
 {
@@ -134,4 +135,22 @@ void led_control(uint8_t led, bool Enable)
         else
             GPIO_ResetBits(GPIOB, GPIO_Pin_1);
     }
+}
+
+void button_reset(void)
+{
+    GPIO_InitTypeDef GPIO_InitStructure;
+    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_6;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_OUT;
+    GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_UP;
+    GPIO_ResetBits(GPIOA, GPIO_Pin_6);
+    GPIO_Init(GPIOA, &GPIO_InitStructure);
+
+    delay_ms(50);
+
+    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_6;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN;
+    GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_UP;
+    GPIO_SetBits(GPIOA, GPIO_Pin_6);
+    GPIO_Init(GPIOA, &GPIO_InitStructure);
 }
