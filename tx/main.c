@@ -15,7 +15,7 @@
 int main()
 {
     delay_init();
-    //SW_VERSION_MAJOR,SW_VERSION_MINOR, SW_VERSION_BUILD);
+    //SW_VERSION_MAJOR,SW_VERSION_MINOR, SW_VERSION_BUILD;
     //jtag_init();
     gpio_init();
     exti_init();

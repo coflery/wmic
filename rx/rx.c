@@ -41,7 +41,7 @@ static uint8_t rx_reg_val[53][4] =
         {0x50, 0x88, 0x00, 0x44}, //REG4
         {0x00, 0x28, 0x03, 0x80}, //REG5
         {0x5B, 0xED, 0xFB, 0x00}, //REG6
-        {0x1C, 0x2E, 0xC5, 0xAA}, //REG7		[23]=1 Enable XO2=12.288 output;[19:17]=b010 for VHF;[19:17]=b111 for UHF
+        {0x1C, 0xAE, 0xC5, 0xAA}, //REG7		[23]=1 Enable XO2=12.288 output;[19:17]=b010 for VHF;[19:17]=b111 for UHF
         {0xEF, 0xF1, 0x19, 0x4C}, //REG8
         {0x08, 0x51, 0x13, 0xA2}, //REG9		[2]=0 for 48kHz;[2]=1 for 28kHz
         {0x00, 0x6F, 0x00, 0x6F}, //REGA
@@ -107,7 +107,7 @@ uint8_t init_rx(void)
   if (i == TIMEOUT)
     return 1;
 
-  for (i = 0; i <= 52; i++)
+  for (i = 0; i < 53; i++)
   {
     if (i <= 0x0b)
       addr = i;
