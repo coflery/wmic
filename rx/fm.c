@@ -66,8 +66,8 @@
 
 //	TX configuration
 //#define GPO_IEN			0x0000
-#define F_DCLK 1440000
-#define REFCLK_PRESCALE (F_DCLK / 32768)
+#define F_DCLK 3072000
+#define REFCLK_PRESCALE (F_DCLK / 48000)
 #define REFCLK_FREQ (F_DCLK / REFCLK_PRESCALE)
 //#define DIGITAL_INPUT_FORMAT		0x0000
 //#define DIGITAL_INPUT_SAMPLE_RATE	0x0000
@@ -322,15 +322,17 @@ uint8_t gpio_ctl()
   return FM_I2C_Write(CMD_GPIO_CTL, buff, sizeof(buff));
 }
 
-void tune_power()
+uint8_t tune_power()
 {
+  uint8_t res = 0;
   uint8_t buff[4];
   buff[0] = 0;
   buff[1] = 0;
   buff[2] = TX_POWER;
   buff[3] = ANTCAP;
-  FM_I2C_Write(CMD_TX_TUNE_POWER, buff, sizeof(buff));
+  res = FM_I2C_Write(CMD_TX_TUNE_POWER, buff, sizeof(buff));
   wait_stc();
+  return res;
 }
 
 void tune_freq(uint16_t freq)
@@ -386,13 +388,13 @@ void tune_scan()
 
 uint8_t fm_init()
 {
-
+  uint8_t res=0;
   //si741x/2x power up and configure
-  return power_up();
-  gpio_ctl();
+  res += power_up();
+  res += gpio_ctl();
   configure();
-  //tune_power();
-  return 0;
+  //res += tune_power();
+  return res;
 }
 
 /* --------------------------------------------------------- */

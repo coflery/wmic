@@ -50,8 +50,9 @@ int main(void)
     {
         res = fm_init();
         led_control(LED2, res == 0);
-        delay_ms(250);
+        delay_ms(1000);
         led_control(LED2, DISABLE);
+        delay_ms(1000);
     }
     return 0;
 }
