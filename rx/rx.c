@@ -82,9 +82,9 @@ static uint8_t rx_reg_val[53][4] =
         {0x00, 0x00, 0x00, 0x00}, //REG35		[31:0] FIFO received data,read 12 times total 12*32=384bit
         {0x01, 0x46, 0x02, 0x00}, //REG36		updated,150708 CRC ERROR VERIFY
         {0x90, 0xF6, 0xAA, 0x29}, //REG37		[23:20]LNA Gain VHF:0xD,UHF:0xF;[7:0]RF threshold for AGC and auto select of dual-ant
-        {0x3F, 0x80, 0x1E, 0x05}, //REG38   [1]=0PCM at slave mode;[1]=1PCM at master mode
-        {0x40, 0x40, 0x40, 0x40}, //REG39		gpio(0-3) in second alternate function
-        {0x00, 0x00, 0x00, 0x40}, //REG3A		gpio(4) in second alternate function
+        {0x3F, 0x80, 0x1E, 0x07}, //REG38   [1]=0PCM at slave mode;[1]=1PCM at master mode
+        {0x48, 0x48, 0x48, 0x48}, //REG39		gpio(0-3) in 2-nd alternate function mode(RSSI/I2S/PCM)
+        {0x00, 0x00, 0x00, 0x48}, //REG3A		gpio(4) in 2-nd alternate function mode(PhaseLock)
         {0x00, 0x78, 0x64, 0x00}, //REG3B
         {0x00, 0x00, 0x06, 0xD3}, //REG3C		[23:0]=(Fshift*2^24/fsamplerate)freeq-shift at up 5Hz,enable it set REG1C[18]=0
 };

@@ -70,15 +70,15 @@ uint8_t spdif_init(void)
   if (0x8805 != (deviceID_H << 8 | deviceID_L))
     return 2;
 
-  res += SPDIF_I2C_Write(0, 0x00); //Reset device
+  res += SPDIF_I2C_Write(0, B00000000); //Reset device
 
   // REGISTER 7
   // bit 7:6 - always 0
   // bit 5:4 - CLKOUT divider select => 00 = 512 fs, 01 = 256 fs, 10 = 128 fs, 11 = 64 fs
   // bit 3 - MCLKDIV select => 0
   // bit 2 - FRACEN => 1
-  // bit 1:0 - FREQMODE (is written by S/PDIF receiver) => 00
-  res += SPDIF_I2C_Write(7, B00000100);
+  // bit 1:0 - FREQMODE => 10
+  res += SPDIF_I2C_Write(7, B00000110);
 
   // REGISTER 8
   // set clock outputs and turn off last data hold
@@ -88,10 +88,10 @@ uint8_t spdif_init(void)
   // bit 4 - CLKOUT pin disable => 1
   // bit 3 - CLKOUT pin select is CLK1 => 0
   // bit 2:0 - always 0
-  res += SPDIF_I2C_Write(8, B00110000);
+  res += SPDIF_I2C_Write(8, B00111000);
 
   // set masking for interrupts
-  res += SPDIF_I2C_Write(10, 126); // 1+2+3+4+5+6 => 0111 1110. We only care about unlock and rec_freq
+  res += SPDIF_I2C_Write(10, B01111110); // 1+2+3+4+5+6 => 0111 1110. We only care about unlock and rec_freq
 
   // set the AIF TX
   // bit 7:6 - always 0
@@ -99,26 +99,33 @@ uint8_t spdif_init(void)
   // bit   4 - BCLK invert => 0
   // bit 3:2 - data word length => 10 (24b) or 00 (16b)
   // bit 1:0 - format select: 11 (dsp), 10 (i2s), 01 (LJ), 00 (RJ)
-  res += SPDIF_I2C_Write(27, B00000001);
+  res += SPDIF_I2C_Write(27, B00001010);
 
   // set the AIF RX
   // bit   7 - SYNC => 1
-  // bit   6 - master mode => 1
+  // bit   6 - master mode => 0
   // bit   5 - LRCLK polarity => 0
   // bit   4 - BCLK invert => 0
   // bit 3:2 - data word length => 10 (24b) or 00 (16b)
   // bit 1:0 - format select: 11 (dsp), 10 (i2s), 01 (LJ), 00 (RJ)
-  res += SPDIF_I2C_Write(28, B11001001);
+  res += SPDIF_I2C_Write(28, B10001010);
 
   // set PLL K and N factors
   // this should be sample rate dependent, but makes hardly any difference
-  res += SPDIF_I2C_Write(6, 7);   // set PLL_N to 7
-  res += SPDIF_I2C_Write(5, 0x36); // set PLL_K to 36FD21 (36)
-  res += SPDIF_I2C_Write(4, 0xFD); // set PLL_K to 36FD21 (FD)
-  res += SPDIF_I2C_Write(3, 0x21); // set PLL_K to 36FD21 (21)
+  res += SPDIF_I2C_Write(6, 8);   // set PLL_N to 8
+  res += SPDIF_I2C_Write(5, 0x0C); // set PLL_K to 0C49BA (0C)
+  res += SPDIF_I2C_Write(4, 0x49); // set PLL_K to 0C49BA (49)
+  res += SPDIF_I2C_Write(3, 0xBA); // set PLL_K to 0C49BA (BA)
 
-  // power up device
-  res += SPDIF_I2C_Write(30, 0);
+  // set the power up
+  // bit 7:6 - always 0
+  // bit   5 - tri-state all outputs => 0
+  // bit   4 - digital audio interface => 0
+  // bit   3 - oscillator power down => 0
+  // bit   2 - S/PDIF transmitter powerdown => 0
+  // bit   1 - S/PDIF receiver powerdown => 1
+  // bit   0 - PLL powerdown => 0
+  res += SPDIF_I2C_Write(30, B00000010);
 
   if (res)
     return 3;

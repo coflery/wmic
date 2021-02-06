@@ -66,11 +66,11 @@
 
 //	TX configuration
 //#define GPO_IEN			0x0000
-#define F_DCLK 3072000
-#define REFCLK_PRESCALE (F_DCLK / 48000)
+#define F_DCLK 24576000
+#define REFCLK_PRESCALE (F_DCLK / 32768)
 #define REFCLK_FREQ (F_DCLK / REFCLK_PRESCALE)
-//#define DIGITAL_INPUT_FORMAT		0x0000
-//#define DIGITAL_INPUT_SAMPLE_RATE	0x0000
+#define DIGITAL_INPUT_FORMAT		2	// 24bits
+#define DIGITAL_INPUT_SAMPLE_RATE	48000
 //#define TX_COMPONENT_ENABLE		0x0003
 #define TX_AUDIO_DEVIATION 9000 // max
 //#define TX_PILOT_DEVIATION		0x02A3
@@ -116,7 +116,8 @@
 
 // si741x/2x power up
 #define FUNC_TX 2    // 2 = Transmit
-#define OPMODE_TX 80 // 01010000 = Analog audio inputs (LIN/RIN)
+#define OPMODE_ANALOG 80 // 01010000 = Analog audio inputs (LIN/RIN)
+#define OPMODE_DIGITAL 15 // 00001111 = Digital audio inputs (DIN/DFS/DCLK)
 
 /* --------------------------------------------------------- */
 
@@ -125,19 +126,8 @@
 #define TUNE_DELAY 150  // ms
 #define TX_POWER 120    // may be set as high as 120 dBμV
 #define ANTCAP 0        // auto
-#define GPIO_CTL 14     // (1 << 3) | (1 << 2) | (1 << 1)
+#define GPIO_CTL 2      // (0 << 3) | (0 << 2) | (1 << 1)
 #define INTACK 1
-
-// pinout
-#define PIN_RES 1 // PB1
-#define PIN_SCL 2 // PB2
-#define PIN_BTN 3 // PB3
-//#define PIN_CLK		4	// PB4
-
-// both < plus && plus < minus
-#define BTN_BOTH_THRESHOLD 25
-#define BTN_PLUS_THRESHOLD 35  // 4K7
-#define BTN_MINUS_THRESHOLD 60 // 10K
 
 // band
 #define BAND_BOTTOM 8750 // 87.5 MHz
@@ -157,6 +147,7 @@ static uint16_t tx_freq = 0; // TX frequency
 /* --------------------------------------------------------- */
 uint8_t get_int_status();
 void configure();
+void wait_cts();
 /* --------------------------------------------------------- */
 
 /* --------------------------------------------------------- */
@@ -190,7 +181,7 @@ void configure();
 //   }
 // }
 
-uint8_t FM_I2C_Read(uint8_t cmd, uint8_t *pBuf, uint8_t len)
+uint8_t FM_I2C_Read(uint8_t *pBuf, uint8_t len)
 {
   uint8_t res = 0;
   /* Send START condition */
@@ -201,14 +192,6 @@ uint8_t FM_I2C_Read(uint8_t cmd, uint8_t *pBuf, uint8_t len)
   if (I2C_CheckAck(I2C_PORT) == NACK)
   {
     res = 1;
-    goto END;
-  }
-
-  /* Send the read command */
-  I2C_WriteByte(I2C_PORT, cmd);
-  if (I2C_CheckAck(I2C_PORT) == NACK)
-  {
-    res = 2;
     goto END;
   }
 
@@ -279,12 +262,12 @@ void wait_stc()
 //si47xx is responding else system reset
 void wait_cts()
 {
-  uint8_t buff = 0;
+  uint8_t buff;
   do
   {
-    //!!!!FM_I2C_Read(CMD_GET_INT_STATUS, &buff, sizeof(buff));
     delay_ms(100);
-  } while (buff >> 7);
+    FM_I2C_Read(&buff, sizeof(buff));
+  } while (!(buff >> 7));
 }
 
 /* --------------------------------------------------------- */
@@ -293,7 +276,7 @@ uint8_t power_up()
 {
   uint8_t buff[2];
   buff[0] = FUNC_TX;
-  buff[1] = OPMODE_TX;
+  buff[1] = OPMODE_DIGITAL;
   return FM_I2C_Write(CMD_POWER_UP, buff, sizeof(buff));
 }
 
@@ -301,17 +284,19 @@ uint8_t set_property(uint16_t property, uint16_t value)
 {
   uint8_t buff[5];
   buff[0] = 0;
-  buff[1] = (property >> 8) & 0xff;
-  buff[2] = (property)&0xff;
-  buff[3] = (value >> 8) & 0xff;
-  buff[4] = (value)&0xff;
+  buff[1] = property >> 8;
+  buff[2] = property;
+  buff[3] = value >> 8;
+  buff[4] = value;
   return FM_I2C_Write(CMD_SET_PROPERTY, buff, sizeof(buff));
 }
 
 uint8_t get_int_status()
 {
-  uint8_t buff=0;
-  FM_I2C_Read(CMD_GET_INT_STATUS, &buff, sizeof(buff));
+  uint8_t res = 0;
+  uint8_t buff;
+  res += FM_I2C_Write(CMD_GET_INT_STATUS, 0, 0);
+  res += FM_I2C_Read(&buff, sizeof(buff));
   return buff;
 }
 
@@ -331,26 +316,28 @@ uint8_t tune_power()
   buff[2] = TX_POWER;
   buff[3] = ANTCAP;
   res = FM_I2C_Write(CMD_TX_TUNE_POWER, buff, sizeof(buff));
-  wait_stc();
+  //wait_stc();
   return res;
 }
 
-void tune_freq(uint16_t freq)
+uint8_t tune_freq(uint16_t freq)
 {
+  uint8_t res=0;
   uint8_t buff[3];
   buff[0] = 0;
-  buff[1] = (freq >> 8) & 0xff;
-  buff[2] = freq & 0xff;
-  FM_I2C_Write(CMD_TX_TUNE_FREQ, buff, sizeof(buff));
-  wait_stc();
+  buff[1] = freq >> 8;
+  buff[2] = freq;
+  res = FM_I2C_Write(CMD_TX_TUNE_FREQ, buff, sizeof(buff));
+  //wait_stc();
+  return res;
 }
 
 void tune_measure(uint16_t freq)
 {
   uint8_t buff[4];
   buff[0] = 0;
-  buff[1] = (freq >> 8) & 0xff;
-  buff[2] = freq & 0xff;
+  buff[1] = freq >> 8;
+  buff[2] = freq;
   buff[3] = ANTCAP;
   FM_I2C_Write(CMD_TX_TUNE_MEASURE, buff, sizeof(buff));
   wait_stc();
@@ -361,8 +348,9 @@ uint8_t tune_status()
   uint8_t buff[1];
   buff[0] = INTACK;
   FM_I2C_Write(CMD_TX_TUNE_STATUS, buff, sizeof(buff));
-  ///!!!!!FM_I2C_Read(CMD_TX_TUNE_STATUS, buff, 1);
-  return buff[0];
+  uint8_t status[8];
+  FM_I2C_Read(status, sizeof(status));
+  return buff[7];
 }
 
 /* --------------------------------------------------------- */
@@ -388,12 +376,13 @@ void tune_scan()
 
 uint8_t fm_init()
 {
-  uint8_t res=0;
+  uint8_t res = 0;
   //si741x/2x power up and configure
   res += power_up();
   res += gpio_ctl();
   configure();
-  //res += tune_power();
+  res += tune_freq(9990);
+  res += tune_power();
   return res;
 }
 
