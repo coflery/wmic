@@ -4,6 +4,7 @@
 #include "fm.h"
 #include "i2c.h"
 #include "gpio.h"
+#include "bitmap.h"
 
 #define I2C_PORT I2C_PORT1
 #define I2C_ADDRESS 0xC6
@@ -69,8 +70,8 @@
 #define F_DCLK 24576000
 #define REFCLK_PRESCALE (F_DCLK / 32768)
 #define REFCLK_FREQ (F_DCLK / REFCLK_PRESCALE)
-#define DIGITAL_INPUT_FORMAT		2	// 24bits
-#define DIGITAL_INPUT_SAMPLE_RATE	48000
+#define DIGITAL_INPUT_FORMAT 2 // 24bits
+#define DIGITAL_INPUT_SAMPLE_RATE 48000
 //#define TX_COMPONENT_ENABLE		0x0003
 #define TX_AUDIO_DEVIATION 9000 // max
 //#define TX_PILOT_DEVIATION		0x02A3
@@ -115,8 +116,8 @@
 #define I2C_ADDR I2C_ADDR_L
 
 // si741x/2x power up
-#define FUNC_TX 2    // 2 = Transmit
-#define OPMODE_ANALOG 80 // 01010000 = Analog audio inputs (LIN/RIN)
+#define FUNC_TX 2         // 2 = Transmit
+#define OPMODE_ANALOG 80  // 01010000 = Analog audio inputs (LIN/RIN)
 #define OPMODE_DIGITAL 15 // 00001111 = Digital audio inputs (DIN/DFS/DCLK)
 
 /* --------------------------------------------------------- */
@@ -145,9 +146,9 @@
 static uint16_t tx_freq = 0; // TX frequency
 
 /* --------------------------------------------------------- */
-uint8_t get_int_status();
-void configure();
-void wait_cts();
+uint8_t get_status(uint8_t *status);
+uint8_t wait_stc();
+uint8_t wait_cts();
 /* --------------------------------------------------------- */
 
 /* --------------------------------------------------------- */
@@ -199,8 +200,10 @@ uint8_t FM_I2C_Read(uint8_t *pBuf, uint8_t len)
   for (uint8_t i = 0; i < len; i++)
   {
     *pBuf = I2C_ReadByte(I2C_PORT);
-    /* Acknowledgement */
-    I2C_Ack(I2C_PORT);
+    if (len == 1)
+      I2C_NAck(I2C_PORT);
+    else
+      I2C_Ack(I2C_PORT);
     pBuf++;
   }
 
@@ -252,59 +255,74 @@ END:
 }
 
 /* --------------------------------------------------------- */
-
-void wait_stc()
+uint8_t wait_stc()
 {
-  while (get_int_status() != 0x81)
-    delay_ms(100);
-}
-
-//si47xx is responding else system reset
-void wait_cts()
-{
-  uint8_t buff;
+  uint8_t res;
+  uint8_t status;
   do
   {
     delay_ms(100);
-    FM_I2C_Read(&buff, sizeof(buff));
-  } while (!(buff >> 7));
+    res = FM_I2C_Read(&status, sizeof(status));
+  } while (res == 0 && !(status & B10000001));
+  return res;
 }
 
+//si47xx is responding else system reset
+uint8_t wait_cts()
+{
+  uint8_t res;
+  uint8_t status;
+  do
+  {
+    delay_ms(100);
+    res = FM_I2C_Read(&status, sizeof(status));
+  } while (res == 0 && !(status & B10000000));
+  return res;
+}
 /* --------------------------------------------------------- */
 
 uint8_t power_up()
 {
+  uint8_t res = 0;
   uint8_t buff[2];
   buff[0] = FUNC_TX;
   buff[1] = OPMODE_DIGITAL;
-  return FM_I2C_Write(CMD_POWER_UP, buff, sizeof(buff));
+  res += FM_I2C_Write(CMD_POWER_UP, buff, sizeof(buff));
+  res += wait_cts();
+  return res;
 }
 
 uint8_t set_property(uint16_t property, uint16_t value)
 {
+  uint8_t res = 0;
   uint8_t buff[5];
   buff[0] = 0;
   buff[1] = property >> 8;
   buff[2] = property;
   buff[3] = value >> 8;
   buff[4] = value;
-  return FM_I2C_Write(CMD_SET_PROPERTY, buff, sizeof(buff));
+  res += FM_I2C_Write(CMD_SET_PROPERTY, buff, sizeof(buff));
+  res += wait_cts();
+  return res;
 }
 
-uint8_t get_int_status()
+uint8_t get_status(uint8_t *status)
 {
   uint8_t res = 0;
-  uint8_t buff;
   res += FM_I2C_Write(CMD_GET_INT_STATUS, 0, 0);
-  res += FM_I2C_Read(&buff, sizeof(buff));
-  return buff;
+  res += FM_I2C_Read(status, sizeof(status));
+  res += wait_cts();
+  return res;
 }
 
 uint8_t gpio_ctl()
 {
+  uint8_t res = 0;
   uint8_t buff[1];
   buff[0] = GPIO_CTL;
-  return FM_I2C_Write(CMD_GPIO_CTL, buff, sizeof(buff));
+  res += FM_I2C_Write(CMD_GPIO_CTL, buff, sizeof(buff));
+  res += wait_cts();
+  return res;
 }
 
 uint8_t tune_power()
@@ -316,19 +334,19 @@ uint8_t tune_power()
   buff[2] = TX_POWER;
   buff[3] = ANTCAP;
   res = FM_I2C_Write(CMD_TX_TUNE_POWER, buff, sizeof(buff));
-  //wait_stc();
+  wait_stc();
   return res;
 }
 
 uint8_t tune_freq(uint16_t freq)
 {
-  uint8_t res=0;
+  uint8_t res = 0;
   uint8_t buff[3];
   buff[0] = 0;
   buff[1] = freq >> 8;
   buff[2] = freq;
   res = FM_I2C_Write(CMD_TX_TUNE_FREQ, buff, sizeof(buff));
-  //wait_stc();
+  wait_stc();
   return res;
 }
 
@@ -353,8 +371,6 @@ uint8_t tune_status()
   return buff[7];
 }
 
-/* --------------------------------------------------------- */
-
 void tune_scan()
 {
   uint8_t rnl = 0xff;
@@ -372,120 +388,116 @@ void tune_scan()
   tune_freq(tx_freq);
 }
 
-/* --------------------------------------------------------- */
+uint8_t configure()
+{
+  uint8_t res = 0;
+
+#if defined(GPO_IEN) && GPO_IEN != 0x0000
+  res += set_property(PROP_GPO_IEN, GPO_IEN); // default 0x0000
+#endif
+#if defined(REFCLK_FREQ) && REFCLK_FREQ != 0x8000
+  res += set_property(PROP_REFCLK_FREQ, REFCLK_FREQ); // default 0x8000
+#endif
+#if defined(REFCLK_PRESCALE) && REFCLK_PRESCALE != 0x0001
+  res += set_property(PROP_REFCLK_PRESCALE, REFCLK_PRESCALE); // default 0x0001
+#endif
+#if defined(DIGITAL_INPUT_FORMAT) && DIGITAL_INPUT_FORMAT != 0x0000
+  res += set_property(PROP_DIGITAL_INPUT_FORMAT, DIGITAL_INPUT_FORMAT); // default 0x0000
+#endif
+#if defined(DIGITAL_INPUT_SAMPLE_RATE) && DIGITAL_INPUT_SAMPLE_RATE != 0x0000
+  res += set_property(PROP_DIGITAL_INPUT_SAMPLE_RATE, DIGITAL_INPUT_SAMPLE_RATE); // default 0x0000
+#endif
+#if defined(TX_COMPONENT_ENABLE) && TX_COMPONENT_ENABLE != 0x0003
+  res += set_property(PROP_TX_COMPONENT_ENABLE, TX_COMPONENT_ENABLE); // default 0x0003
+#endif
+#if defined(TX_AUDIO_DEVIATION) && TX_AUDIO_DEVIATION != 0x1AA9
+  res += set_property(PROP_TX_AUDIO_DEVIATION, TX_AUDIO_DEVIATION); // default 0x1AA9
+#endif
+#if defined(TX_PILOT_DEVIATION) && TX_PILOT_DEVIATION != 0x02A3
+  res += set_property(PROP_TX_PILOT_DEVIATION, TX_PILOT_DEVIATION); // default 0x02A3
+#endif
+#if defined(TX_RDS_DEVIATION) && TX_RDS_DEVIATION != 0x00C8
+  res += set_property(PROP_TX_RDS_DEVIATION, TX_RDS_DEVIATION); // default 0x00C8
+#endif
+#if defined(TX_LINE_INPUT_LEVEL) && TX_LINE_INPUT_LEVEL != 0x327C
+  res += set_property(PROP_TX_LINE_INPUT_LEVEL, TX_LINE_INPUT_LEVEL); // default 0x327C
+#endif
+#if defined(TX_LINE_INPUT_MUTE) && TX_LINE_INPUT_MUTE != 0x0000
+  res += set_property(PROP_TX_LINE_INPUT_MUTE, TX_LINE_INPUT_MUTE); // default 0x0000
+#endif
+#if defined(TX_PREEMPHASIS) && TX_PREEMPHASIS != 0x0000
+  res += set_property(PROP_TX_PREEMPHASIS, TX_PREEMPHASIS); // default 0x0000
+#endif
+#if defined(TX_PILOT_FREQUENCY) && TX_PILOT_FREQUENCY != 0x4A38
+  res += set_property(PROP_TX_PILOT_FREQUENCY, TX_PILOT_FREQUENCY); // default 0x4A38
+#endif
+#if defined(TX_ACOMP_ENABLE) && TX_ACOMP_ENABLE != 0x0002
+  res += set_property(PROP_TX_ACOMP_ENABLE, TX_ACOMP_ENABLE); // default 0x0002
+#endif
+#if defined(TX_ACOMP_THRESHOLD) && TX_ACOMP_THRESHOLD != 0xFFD8
+  res += set_property(PROP_TX_ACOMP_THRESHOLD, TX_ACOMP_THRESHOLD); // default 0xFFD8
+#endif
+#if defined(TX_ACOMP_ATTACK_TIME) && TX_ACOMP_ATTACK_TIME != 0x0000
+  res += set_property(PROP_TX_ACOMP_ATTACK_TIME, TX_ACOMP_ATTACK_TIME); // default 0x0000
+#endif
+#if defined(TX_ACOMP_RELEASE_TIME) && TX_ACOMP_RELEASE_TIME != 0x0004
+  res += set_property(PROP_TX_ACOMP_RELEASE_TIME, TX_ACOMP_RELEASE_TIME); // default 0x0004
+#endif
+#if defined(TX_ACOMP_GAIN) && TX_ACOMP_GAIN != 0x000F
+  res += set_property(PROP_TX_ACOMP_GAIN, TX_ACOMP_GAIN); // default 0x000F
+#endif
+#if defined(TX_LIMITER_RELEASE_TIME) && TX_LIMITER_RELEASE_TIME != 0x0066
+  res += set_property(PROP_TX_LIMITER_RELEASE_TIME, TX_LIMITER_RELEASE_TIME); // default 0x0066
+#endif
+#if defined(TX_ASQ_INTERRUPT_SOURCE) && TX_ASQ_INTERRUPT_SOURCE != 0x0000
+  res += set_property(PROP_TX_ASQ_INTERRUPT_SOURCE, TX_ASQ_INTERRUPT_SOURCE); // default 0x0000
+#endif
+#if defined(TX_ASQ_LEVEL_LOW) && TX_ASQ_LEVEL_LOW != 0x0000
+  res += set_property(PROP_TX_ASQ_LEVEL_LOW, TX_ASQ_LEVEL_LOW); // default 0x0000
+#endif
+#if defined(TX_ASQ_DURATION_LOW) && TX_ASQ_DURATION_LOW != 0x0000
+  res += set_property(PROP_TX_ASQ_DURATION_LOW, TX_ASQ_DURATION_LOW); // default 0x0000
+#endif
+#if defined(TX_ASQ_LEVEL_HIGH) && TX_ASQ_LEVEL_HIGH != 0x0000
+  res += set_property(PROP_TX_ASQ_LEVEL_HIGH, TX_ASQ_LEVEL_HIGH); // default 0x0000
+#endif
+#if defined(TX_ASQ_DURATION_HIGH) && TX_ASQ_DURATION_HIGH != 0x0000
+  res += set_property(PROP_TX_ASQ_DURATION_HIGH, TX_ASQ_DURATION_HIGH); // default 0x0000
+#endif
+#if defined(TX_RDS_INTERRUPT_SOURCE) && TX_RDS_INTERRUPT_SOURCE != 0x0000
+  res += set_property(PROP_TX_RDS_INTERRUPT_SOURCE, TX_RDS_INTERRUPT_SOURCE); // default 0x0000
+#endif
+#if defined(TX_RDS_PI) && TX_RDS_PI != 0x40A7
+  res += set_property(PROP_TX_RDS_PI, TX_RDS_PI); // default 0x40A7
+#endif
+#if defined(TX_RDS_PS_MIX) && TX_RDS_PS_MIX != 0x0003
+  res += set_property(PROP_TX_RDS_PS_MIX, TX_RDS_PS_MIX); // default 0x0003
+#endif
+#if defined(TX_RDS_PS_MISC) && TX_RDS_PS_MISC != 0x1008
+  res += set_property(PROP_TX_RDS_PS_MISC, TX_RDS_PS_MISC); // default 0x1008
+#endif
+#if defined(TX_RDS_PS_REPEAT_COUNT) && TX_RDS_PS_REPEAT_COUNT != 0x0003
+  res += set_property(PROP_TX_RDS_PS_REPEAT_COUNT, TX_RDS_PS_REPEAT_COUNT); // default 0x0003
+#endif
+#if defined(TX_RDS_PS_MESSAGE_COUNT) && TX_RDS_PS_MESSAGE_COUNT != 0x0001
+  res += set_property(PROP_TX_RDS_PS_MESSAGE_COUNT, TX_RDS_PS_MESSAGE_COUNT); // default 0x0001
+#endif
+#if defined(TX_RDS_PS_AF) && TX_RDS_PS_AF != 0xE0E0
+  res += set_property(PROP_TX_RDS_PS_AF, TX_RDS_PS_AF); // default 0xE0E0
+#endif
+#if defined(TX_RDS_FIFO_SIZE) && TX_RDS_FIFO_SIZE != 0x0000
+  res += set_property(PROP_TX_RDS_FIFO_SIZE, TX_RDS_FIFO_SIZE); // default 0x0000
+#endif
+  return res;
+}
 
 uint8_t fm_init()
 {
   uint8_t res = 0;
-  //si741x/2x power up and configure
   res += power_up();
   res += gpio_ctl();
-  configure();
-  res += tune_freq(9990);
+  res += configure();
+  res += tune_freq(10110);
   res += tune_power();
   return res;
 }
-
-/* --------------------------------------------------------- */
-
-void configure()
-{
-#if defined(GPO_IEN) && GPO_IEN != 0x0000
-  set_property(PROP_GPO_IEN, GPO_IEN); // default 0x0000
-#endif
-#if defined(REFCLK_FREQ) && REFCLK_FREQ != 0x8000
-  set_property(PROP_REFCLK_FREQ, REFCLK_FREQ); // default 0x8000
-#endif
-#if defined(REFCLK_PRESCALE) && REFCLK_PRESCALE != 0x0001
-  set_property(PROP_REFCLK_PRESCALE, REFCLK_PRESCALE); // default 0x0001
-#endif
-#if defined(DIGITAL_INPUT_FORMAT) && DIGITAL_INPUT_FORMAT != 0x0000
-  set_property(PROP_DIGITAL_INPUT_FORMAT, DIGITAL_INPUT_FORMAT); // default 0x0000
-#endif
-#if defined(DIGITAL_INPUT_SAMPLE_RATE) && DIGITAL_INPUT_SAMPLE_RATE != 0x0000
-  set_property(PROP_DIGITAL_INPUT_SAMPLE_RATE, DIGITAL_INPUT_SAMPLE_RATE); // default 0x0000
-#endif
-#if defined(TX_COMPONENT_ENABLE) && TX_COMPONENT_ENABLE != 0x0003
-  set_property(PROP_TX_COMPONENT_ENABLE, TX_COMPONENT_ENABLE); // default 0x0003
-#endif
-#if defined(TX_AUDIO_DEVIATION) && TX_AUDIO_DEVIATION != 0x1AA9
-  set_property(PROP_TX_AUDIO_DEVIATION, TX_AUDIO_DEVIATION); // default 0x1AA9
-#endif
-#if defined(TX_PILOT_DEVIATION) && TX_PILOT_DEVIATION != 0x02A3
-  set_property(PROP_TX_PILOT_DEVIATION, TX_PILOT_DEVIATION); // default 0x02A3
-#endif
-#if defined(TX_RDS_DEVIATION) && TX_RDS_DEVIATION != 0x00C8
-  set_property(PROP_TX_RDS_DEVIATION, TX_RDS_DEVIATION); // default 0x00C8
-#endif
-#if defined(TX_LINE_INPUT_LEVEL) && TX_LINE_INPUT_LEVEL != 0x327C
-  set_property(PROP_TX_LINE_INPUT_LEVEL, TX_LINE_INPUT_LEVEL); // default 0x327C
-#endif
-#if defined(TX_LINE_INPUT_MUTE) && TX_LINE_INPUT_MUTE != 0x0000
-  set_property(PROP_TX_LINE_INPUT_MUTE, TX_LINE_INPUT_MUTE); // default 0x0000
-#endif
-#if defined(TX_PREEMPHASIS) && TX_PREEMPHASIS != 0x0000
-  set_property(PROP_TX_PREEMPHASIS, TX_PREEMPHASIS); // default 0x0000
-#endif
-#if defined(TX_PILOT_FREQUENCY) && TX_PILOT_FREQUENCY != 0x4A38
-  set_property(PROP_TX_PILOT_FREQUENCY, TX_PILOT_FREQUENCY); // default 0x4A38
-#endif
-#if defined(TX_ACOMP_ENABLE) && TX_ACOMP_ENABLE != 0x0002
-  set_property(PROP_TX_ACOMP_ENABLE, TX_ACOMP_ENABLE); // default 0x0002
-#endif
-#if defined(TX_ACOMP_THRESHOLD) && TX_ACOMP_THRESHOLD != 0xFFD8
-  set_property(PROP_TX_ACOMP_THRESHOLD, TX_ACOMP_THRESHOLD); // default 0xFFD8
-#endif
-#if defined(TX_ACOMP_ATTACK_TIME) && TX_ACOMP_ATTACK_TIME != 0x0000
-  set_property(PROP_TX_ACOMP_ATTACK_TIME, TX_ACOMP_ATTACK_TIME); // default 0x0000
-#endif
-#if defined(TX_ACOMP_RELEASE_TIME) && TX_ACOMP_RELEASE_TIME != 0x0004
-  set_property(PROP_TX_ACOMP_RELEASE_TIME, TX_ACOMP_RELEASE_TIME); // default 0x0004
-#endif
-#if defined(TX_ACOMP_GAIN) && TX_ACOMP_GAIN != 0x000F
-  set_property(PROP_TX_ACOMP_GAIN, TX_ACOMP_GAIN); // default 0x000F
-#endif
-#if defined(TX_LIMITER_RELEASE_TIME) && TX_LIMITER_RELEASE_TIME != 0x0066
-  set_property(PROP_TX_LIMITER_RELEASE_TIME, TX_LIMITER_RELEASE_TIME); // default 0x0066
-#endif
-#if defined(TX_ASQ_INTERRUPT_SOURCE) && TX_ASQ_INTERRUPT_SOURCE != 0x0000
-  set_property(PROP_TX_ASQ_INTERRUPT_SOURCE, TX_ASQ_INTERRUPT_SOURCE); // default 0x0000
-#endif
-#if defined(TX_ASQ_LEVEL_LOW) && TX_ASQ_LEVEL_LOW != 0x0000
-  set_property(PROP_TX_ASQ_LEVEL_LOW, TX_ASQ_LEVEL_LOW); // default 0x0000
-#endif
-#if defined(TX_ASQ_DURATION_LOW) && TX_ASQ_DURATION_LOW != 0x0000
-  set_property(PROP_TX_ASQ_DURATION_LOW, TX_ASQ_DURATION_LOW); // default 0x0000
-#endif
-#if defined(TX_ASQ_LEVEL_HIGH) && TX_ASQ_LEVEL_HIGH != 0x0000
-  set_property(PROP_TX_ASQ_LEVEL_HIGH, TX_ASQ_LEVEL_HIGH); // default 0x0000
-#endif
-#if defined(TX_ASQ_DURATION_HIGH) && TX_ASQ_DURATION_HIGH != 0x0000
-  set_property(PROP_TX_ASQ_DURATION_HIGH, TX_ASQ_DURATION_HIGH); // default 0x0000
-#endif
-#if defined(TX_RDS_INTERRUPT_SOURCE) && TX_RDS_INTERRUPT_SOURCE != 0x0000
-  set_property(PROP_TX_RDS_INTERRUPT_SOURCE, TX_RDS_INTERRUPT_SOURCE); // default 0x0000
-#endif
-#if defined(TX_RDS_PI) && TX_RDS_PI != 0x40A7
-  set_property(PROP_TX_RDS_PI, TX_RDS_PI); // default 0x40A7
-#endif
-#if defined(TX_RDS_PS_MIX) && TX_RDS_PS_MIX != 0x0003
-  set_property(PROP_TX_RDS_PS_MIX, TX_RDS_PS_MIX); // default 0x0003
-#endif
-#if defined(TX_RDS_PS_MISC) && TX_RDS_PS_MISC != 0x1008
-  set_property(PROP_TX_RDS_PS_MISC, TX_RDS_PS_MISC); // default 0x1008
-#endif
-#if defined(TX_RDS_PS_REPEAT_COUNT) && TX_RDS_PS_REPEAT_COUNT != 0x0003
-  set_property(PROP_TX_RDS_PS_REPEAT_COUNT, TX_RDS_PS_REPEAT_COUNT); // default 0x0003
-#endif
-#if defined(TX_RDS_PS_MESSAGE_COUNT) && TX_RDS_PS_MESSAGE_COUNT != 0x0001
-  set_property(PROP_TX_RDS_PS_MESSAGE_COUNT, TX_RDS_PS_MESSAGE_COUNT); // default 0x0001
-#endif
-#if defined(TX_RDS_PS_AF) && TX_RDS_PS_AF != 0xE0E0
-  set_property(PROP_TX_RDS_PS_AF, TX_RDS_PS_AF); // default 0xE0E0
-#endif
-#if defined(TX_RDS_FIFO_SIZE) && TX_RDS_FIFO_SIZE != 0x0000
-  set_property(PROP_TX_RDS_FIFO_SIZE, TX_RDS_FIFO_SIZE); // default 0x0000
-#endif
-}
-
-/* --------------------------------------------------------- */
