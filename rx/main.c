@@ -46,9 +46,12 @@ int main(void)
     delay_ms(500);
     // hw_i2c_config();
     // nvic_config();
+    res = fm_init();
     while (1)
     {
-        res = fm_init();
+        if (res != 0)
+            res = fm_init();
+
         led_control(LED2, res == 0);
         delay_ms(1000);
         led_control(LED2, DISABLE);

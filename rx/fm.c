@@ -67,18 +67,19 @@
 
 //	TX configuration
 //#define GPO_IEN			0x0000
-#define F_DCLK 24576000
-#define REFCLK_PRESCALE (F_DCLK / 32768)
-#define REFCLK_FREQ (F_DCLK / REFCLK_PRESCALE)
-#define DIGITAL_INPUT_FORMAT 2 // 24bits
-#define DIGITAL_INPUT_SAMPLE_RATE 48000
+#define F_CLK 3072000
+#define REFCLK_FREQ 32000
+#define REFCLK_PRESCALE (F_CLK / REFCLK_FREQ)
+#define REFCLK_RCLKSEL 1                // clock source from DCLK
+#define DIGITAL_INPUT_FORMAT 2          // Audio depth = 24bits
+#define DIGITAL_INPUT_SAMPLE_RATE 48000 // Audio sample rate
 //#define TX_COMPONENT_ENABLE		0x0003
 #define TX_AUDIO_DEVIATION 9000 // max
 //#define TX_PILOT_DEVIATION		0x02A3
 //#define TX_RDS_DEVIATION		0x00C8
 //#define TX_LINE_INPUT_LEVEL		0x327C
 //#define TX_LINE_INPUT_MUTE		0x0000
-#define TX_PREEMPHASIS 1 // 50 μs - Europe, Australia, Japan
+#define TX_PREEMPHASIS 2 // 75 μs - USA
 //#define TX_PILOT_FREQUENCY		0x4A38
 
 //#define TX_ACOMP_ENABLE		0x0003	// Example 1 (minimal compression):
@@ -110,11 +111,6 @@
 
 /* --------------------------------------------------------- */
 
-// si74xx i2c
-#define I2C_ADDR_L 17 // SEN = 0, address 0010001
-#define I2C_ADDR_H 99 // SEN = 1, address 1100011
-#define I2C_ADDR I2C_ADDR_L
-
 // si741x/2x power up
 #define FUNC_TX 2         // 2 = Transmit
 #define OPMODE_ANALOG 80  // 01010000 = Analog audio inputs (LIN/RIN)
@@ -123,64 +119,16 @@
 /* --------------------------------------------------------- */
 
 // misc
-#define TUNE_SPACING 10 // kHz
-#define TUNE_DELAY 150  // ms
 #define TX_POWER 120    // may be set as high as 120 dBμV
 #define ANTCAP 0        // auto
 #define GPIO_CTL 2      // (0 << 3) | (0 << 2) | (1 << 1)
 #define INTACK 1
-
-// band
-#define BAND_BOTTOM 8750 // 87.5 MHz
-#define BAND_TOP 10800   // 108.0 MHz
-
-// wdt
-#define WDTO WDTO_500MS
-#define wdt_sei() bitSet(WDTCR, WDIE)
-#define wdt_cli() bitClear(WDTCR, WDIE)
-
-// list
-#define LIST_SIZE 119
-
-/* --------------------------------------------------------- */
-static uint16_t tx_freq = 0; // TX frequency
 
 /* --------------------------------------------------------- */
 uint8_t get_status(uint8_t *status);
 uint8_t wait_stc();
 uint8_t wait_cts();
 /* --------------------------------------------------------- */
-
-/* --------------------------------------------------------- */
-
-// void write_command(uint8_t length)
-// {
-//   uint8_t i = 0;
-//   TinyWireM.beginTransmission(I2C_ADDR);
-//   while (i < length)
-//     TinyWireM.send(buff[i++]);
-//   TinyWireM.endTransmission();
-//   wait_cts();
-// }
-
-// uint8_t read_status() // status byte
-// {
-//   TinyWireM.requestFrom(I2C_ADDR, 1);
-//   while (!TinyWireM.available())
-//     delay_ms(100);
-//   return TinyWireM.receive();
-// }
-
-// void read_response(uint8_t length)
-// {
-//   TinyWireM.requestFrom(I2C_ADDR, length);
-//   for (uint8_t i = 0; i < length; i++)
-//   {
-//     while (!TinyWireM.available())
-//       delay_ms(100);
-//     buff[i] = TinyWireM.receive();
-//   }
-// }
 
 uint8_t FM_I2C_Read(uint8_t *pBuf, uint8_t len)
 {
@@ -371,23 +319,6 @@ uint8_t tune_status()
   return buff[7];
 }
 
-void tune_scan()
-{
-  uint8_t rnl = 0xff;
-  uint8_t buff;
-  for (uint16_t f = BAND_BOTTOM; f <= BAND_TOP; f += TUNE_SPACING)
-  {
-    tune_measure(f);
-    buff = tune_status();
-    if (buff > rnl)
-      continue;
-    rnl = buff;
-    tx_freq = f;
-  }
-  tune_power();
-  tune_freq(tx_freq);
-}
-
 uint8_t configure()
 {
   uint8_t res = 0;
@@ -399,7 +330,7 @@ uint8_t configure()
   res += set_property(PROP_REFCLK_FREQ, REFCLK_FREQ); // default 0x8000
 #endif
 #if defined(REFCLK_PRESCALE) && REFCLK_PRESCALE != 0x0001
-  res += set_property(PROP_REFCLK_PRESCALE, REFCLK_PRESCALE); // default 0x0001
+  res += set_property(PROP_REFCLK_PRESCALE, (REFCLK_RCLKSEL) << 12 | REFCLK_PRESCALE); // default 0x0001
 #endif
 #if defined(DIGITAL_INPUT_FORMAT) && DIGITAL_INPUT_FORMAT != 0x0000
   res += set_property(PROP_DIGITAL_INPUT_FORMAT, DIGITAL_INPUT_FORMAT); // default 0x0000
@@ -497,7 +428,7 @@ uint8_t fm_init()
   res += power_up();
   res += gpio_ctl();
   res += configure();
-  res += tune_freq(10110);
+  res += tune_freq(10300);
   res += tune_power();
   return res;
 }
