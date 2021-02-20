@@ -43,7 +43,7 @@
 #define PROP_TX_RDS_DEVIATION 0x2103          //0x00C8 Si4721 Only. Configures the RDS/RBDS frequency deviation level. Units are in 10 Hz increments. Default is 2 kHz.
 #define PROP_TX_LINE_INPUT_LEVEL 0x2104       //0x327C Configures maximum analog line input level to the LIN/RIN pins to reach the maximum deviation level programmed into the audio deviation property TX Audio Deviation. Default is 636 mVPK.
 #define PROP_TX_LINE_INPUT_MUTE 0x2105        //0x0000 Sets line input mute. L and R inputs may be independently muted. Default is not muted.
-#define PROP_TX_PREEMPHASIS 0x2106            //0x0000 Configures pre-emphasis time constant. Default is 0 (75 µS).
+#define PROP_TX_PREEMPHASIS 0x2106            //0x0000 Configures pre-emphasis time constant. Default is 0 (75 μS).
 #define PROP_TX_PILOT_FREQUENCY 0x2107        //0x4A38 Configures the frequency of the stereo pilot. Default is 19000 Hz.
 #define PROP_TX_ACOMP_ENABLE 0x2200           //0x0002 Enables audio dynamic range control and limiter. Default is 2 (limiter is enabled, audio dynamic range control is disabled).
 #define PROP_TX_ACOMP_THRESHOLD 0x2201        //0xFFD8 Sets the threshold level for audio dynamic range control. Default is -40 dB.
@@ -79,7 +79,7 @@
 //#define TX_RDS_DEVIATION		0x00C8
 //#define TX_LINE_INPUT_LEVEL		0x327C
 //#define TX_LINE_INPUT_MUTE		0x0000
-#define TX_PREEMPHASIS 2 // 75 μs - USA
+#define TX_PREEMPHASIS 0 // 75 μs - USA
 //#define TX_PILOT_FREQUENCY		0x4A38
 
 //#define TX_ACOMP_ENABLE		0x0003	// Example 1 (minimal compression):
@@ -112,6 +112,7 @@
 /* --------------------------------------------------------- */
 
 // si741x/2x power up
+#define FUNC_RX 1         // 1 = Receive
 #define FUNC_TX 2         // 2 = Transmit
 #define OPMODE_ANALOG 80  // 01010000 = Analog audio inputs (LIN/RIN)
 #define OPMODE_DIGITAL 15 // 00001111 = Digital audio inputs (DIN/DFS/DCLK)
@@ -119,9 +120,9 @@
 /* --------------------------------------------------------- */
 
 // misc
-#define TX_POWER 120    // may be set as high as 120 dBμV
-#define ANTCAP 0        // auto
-#define GPIO_CTL 2      // (0 << 3) | (0 << 2) | (1 << 1)
+#define TX_POWER 120 // may be set as high as 120 dBμV
+#define ANTCAP 0     // auto
+#define GPIO_CTL 2   // (0 << 3) | (0 << 2) | (1 << 1)
 #define INTACK 1
 
 /* --------------------------------------------------------- */
