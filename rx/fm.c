@@ -1,4 +1,5 @@
 ﻿#include <stdbool.h>
+#include <stddef.h>
 #include "stm32f0xx.h"
 #include "delay.h"
 #include "fm.h"
@@ -74,12 +75,12 @@
 #define DIGITAL_INPUT_FORMAT 2          // Audio depth = 24bits
 #define DIGITAL_INPUT_SAMPLE_RATE 48000 // Audio sample rate
 //#define TX_COMPONENT_ENABLE		0x0003
-#define TX_AUDIO_DEVIATION 9000 // max
+#define TX_AUDIO_DEVIATION 7500 // 75 KHz
 //#define TX_PILOT_DEVIATION		0x02A3
 //#define TX_RDS_DEVIATION		0x00C8
 //#define TX_LINE_INPUT_LEVEL		0x327C
 //#define TX_LINE_INPUT_MUTE		0x0000
-#define TX_PREEMPHASIS 0 // 75 μs - USA
+#define TX_PREEMPHASIS 1 // 50 μs - Asia
 //#define TX_PILOT_FREQUENCY		0x4A38
 
 //#define TX_ACOMP_ENABLE		0x0003	// Example 1 (minimal compression):
@@ -126,6 +127,18 @@
 #define INTACK 1
 
 /* --------------------------------------------------------- */
+struct REV
+{
+  uint8_t status;
+  uint8_t PartNum;
+  char FirewareRevMajor;
+  char FirewareRevMinor;
+  uint16_t PatchID;
+  char ComponentRevMajor;
+  char ComponentRevMinor;
+  char DieRev;
+};
+
 uint8_t get_status(uint8_t *status);
 uint8_t wait_stc();
 uint8_t wait_cts();
@@ -241,6 +254,14 @@ uint8_t power_up()
   return res;
 }
 
+uint8_t power_down()
+{
+  uint8_t res = 0;
+  res += FM_I2C_Write(CMD_POWER_DOWN, NULL, 0);
+  res += wait_cts();
+  return res;
+}
+
 uint8_t set_property(uint16_t property, uint16_t value)
 {
   uint8_t res = 0;
@@ -258,9 +279,17 @@ uint8_t set_property(uint16_t property, uint16_t value)
 uint8_t get_status(uint8_t *status)
 {
   uint8_t res = 0;
-  res += FM_I2C_Write(CMD_GET_INT_STATUS, 0, 0);
+  res += FM_I2C_Write(CMD_GET_INT_STATUS, NULL, 0);
   res += FM_I2C_Read(status, sizeof(status));
-  res += wait_cts();
+  return res;
+}
+
+uint8_t get_rev()
+{
+  struct REV rev;
+  uint8_t res = 0;
+  res += FM_I2C_Write(CMD_GET_REV, NULL, 0);
+  res += FM_I2C_Read((uint8_t *)(&rev), 9);
   return res;
 }
 
@@ -426,7 +455,9 @@ uint8_t configure()
 uint8_t fm_init()
 {
   uint8_t res = 0;
+  res += power_down();
   res += power_up();
+  res += get_rev();
   res += gpio_ctl();
   res += configure();
   res += tune_freq(10300);
