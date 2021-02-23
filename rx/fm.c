@@ -34,10 +34,10 @@
 
 //	TX properties
 #define PROP_GPO_IEN 0x0001                   //0x0000 Enables interrupt sources.
-#define PROP_REFCLK_FREQ 0x0201               //0x8000 Sets frequency of reference clock in Hz. The range is 31130 to 34406 Hz, or 0 to disable the AFC. Default is 32768 Hz.
-#define PROP_REFCLK_PRESCALE 0x0202           //0x0001 Sets the prescaler value for RCLK input.
 #define PROP_DIGITAL_INPUT_FORMAT 0x0101      //0x0000 Configures the digital input format.
 #define PROP_DIGITAL_INPUT_SAMPLE_RATE 0x0103 //0x0000 Configures the digital input sample rate in 1 Hz steps. Default is 0.
+#define PROP_REFCLK_FREQ 0x0201               //0x8000 Sets frequency of reference clock in Hz. The range is 31130 to 34406 Hz, or 0 to disable the AFC. Default is 32768 Hz.
+#define PROP_REFCLK_PRESCALE 0x0202           //0x0001 Sets the prescaler value for RCLK input.
 #define PROP_TX_COMPONENT_ENABLE 0x2100       //0x0003 Enable transmit multiplex signal components. Default has pilot and L-R enabled.
 #define PROP_TX_AUDIO_DEVIATION 0x2101        //0x1AA9 Configures audio frequency deviation level. Units are in 10 Hz increments. Default is 6825 (68.25 kHz).
 #define PROP_TX_PILOT_DEVIATION 0x2102        //0x02A3 Configures pilot tone frequency deviation level. Units are in 10 Hz increments. Default is 675 (6.75 kHz)
@@ -72,7 +72,7 @@
 #define REFCLK_FREQ 32000
 #define REFCLK_PRESCALE (F_CLK / REFCLK_FREQ)
 #define REFCLK_RCLKSEL 1                // clock source from DCLK
-#define DIGITAL_INPUT_FORMAT 2          // Audio depth = 24bits
+#define DIGITAL_INPUT_FORMAT 10         // Audio format I2S@24bits
 #define DIGITAL_INPUT_SAMPLE_RATE 48000 // Audio sample rate
 //#define TX_COMPONENT_ENABLE		0x0003
 #define TX_AUDIO_DEVIATION 7500 // 75 KHz
@@ -127,9 +127,9 @@
 #define INTACK 1
 
 /* --------------------------------------------------------- */
-struct REV
+typedef struct
 {
-  uint8_t status;
+  uint8_t Status;
   uint8_t PartNum;
   char FirewareRevMajor;
   char FirewareRevMinor;
@@ -137,7 +137,18 @@ struct REV
   char ComponentRevMajor;
   char ComponentRevMinor;
   char DieRev;
-};
+} REV;
+
+typedef struct
+{
+  uint8_t Status;
+  uint8_t Reserved0;
+  uint16_t Frequency;
+  uint8_t Reserved1;
+  uint8_t RFPower;
+  uint8_t ANTCapacitor;
+  uint8_t RXNoiseLevel;
+} TXTUNE;
 
 uint8_t get_status(uint8_t *status);
 uint8_t wait_stc();
@@ -225,7 +236,7 @@ uint8_t wait_stc()
   {
     delay_ms(100);
     res = FM_I2C_Read(&status, sizeof(status));
-  } while (res == 0 && !(status & B10000001));
+  } while (res == 0 && !(status & B00000001));
   return res;
 }
 
@@ -286,10 +297,13 @@ uint8_t get_status(uint8_t *status)
 
 uint8_t get_rev()
 {
-  struct REV rev;
+  REV rev;
   uint8_t res = 0;
   res += FM_I2C_Write(CMD_GET_REV, NULL, 0);
   res += FM_I2C_Read((uint8_t *)(&rev), 9);
+  res += !(rev.Status & 0x80); //response check
+  res += !(rev.PartNum == 20); //chipID check
+  res += wait_cts();
   return res;
 }
 
@@ -323,30 +337,34 @@ uint8_t tune_freq(uint16_t freq)
   buff[0] = 0;
   buff[1] = freq >> 8;
   buff[2] = freq;
-  res = FM_I2C_Write(CMD_TX_TUNE_FREQ, buff, sizeof(buff));
+  res += FM_I2C_Write(CMD_TX_TUNE_FREQ, buff, sizeof(buff));
   wait_stc();
   return res;
 }
 
-void tune_measure(uint16_t freq)
+uint8_t tune_measure(uint16_t freq)
 {
+  uint8_t res = 0;
   uint8_t buff[4];
   buff[0] = 0;
   buff[1] = freq >> 8;
   buff[2] = freq;
   buff[3] = ANTCAP;
-  FM_I2C_Write(CMD_TX_TUNE_MEASURE, buff, sizeof(buff));
+  res += FM_I2C_Write(CMD_TX_TUNE_MEASURE, buff, sizeof(buff));
   wait_stc();
+  return res;
 }
 
 uint8_t tune_status()
 {
+  TXTUNE status;
+  uint8_t res = 0;
   uint8_t buff[1];
   buff[0] = INTACK;
-  FM_I2C_Write(CMD_TX_TUNE_STATUS, buff, sizeof(buff));
-  uint8_t status[8];
-  FM_I2C_Read(status, sizeof(status));
-  return buff[7];
+  res += FM_I2C_Write(CMD_TX_TUNE_STATUS, buff, sizeof(buff));
+  res += FM_I2C_Read((uint8_t *)(&status), 8);
+  wait_cts();
+  return res;
 }
 
 uint8_t configure()
@@ -462,5 +480,6 @@ uint8_t fm_init()
   res += configure();
   res += tune_freq(10300);
   res += tune_power();
+  res += tune_status();
   return res;
 }
