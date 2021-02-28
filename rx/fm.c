@@ -237,6 +237,8 @@ uint8_t wait_stc()
     delay_ms(100);
     res = FM_I2C_Read(&status, sizeof(status));
   } while (res == 0 && !(status & B00000001));
+  if (status & B01000000)
+    return 2;
   return res;
 }
 
@@ -250,6 +252,8 @@ uint8_t wait_cts()
     delay_ms(100);
     res = FM_I2C_Read(&status, sizeof(status));
   } while (res == 0 && !(status & B10000000));
+  if (status & B01000000)
+    return 2;
   return res;
 }
 /* --------------------------------------------------------- */
@@ -303,7 +307,6 @@ uint8_t get_rev()
   res += FM_I2C_Read((uint8_t *)(&rev), 9);
   res += !(rev.Status & 0x80); //response check
   res += !(rev.PartNum == 20); //chipID check
-  res += wait_cts();
   return res;
 }
 
