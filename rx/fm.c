@@ -235,6 +235,7 @@ uint8_t wait_stc()
   do
   {
     delay_ms(100);
+    //res = get_status(&status);
     res = FM_I2C_Read(&status, sizeof(status));
   } while (res == 0 && !(status & B00000001));
   if (status & B01000000)
@@ -250,6 +251,7 @@ uint8_t wait_cts()
   do
   {
     delay_ms(100);
+    //res = get_status(&status);
     res = FM_I2C_Read(&status, sizeof(status));
   } while (res == 0 && !(status & B10000000));
   if (status & B01000000)
