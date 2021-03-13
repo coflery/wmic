@@ -157,7 +157,6 @@ typedef struct
   uint8_t RXNoiseLevel;
 } TXTUNE;
 
-uint8_t get_int_status(uint8_t *status);
 uint8_t tune_status();
 uint8_t wait_stc();
 uint8_t wait_cts();
@@ -243,8 +242,8 @@ uint8_t wait_stc()
   do
   {
     delay_ms(100);
-    res = get_int_status(&status);
-    //res += FM_I2C_Read(&status, sizeof(status));
+    res = FM_I2C_Write(CMD_GET_INT_STATUS, NULL, 0);
+    res += FM_I2C_Read(&status, sizeof(status));
   } while (res == 0 && !(status & B00000001));
   if (status & B01000000)
     return 2;
@@ -297,14 +296,6 @@ uint8_t set_property(uint16_t property, uint16_t value)
   buff[4] = value;
   res += FM_I2C_Write(CMD_SET_PROPERTY, buff, sizeof(buff));
   res += wait_cts();
-  return res;
-}
-
-uint8_t get_int_status(uint8_t *status)
-{
-  uint8_t res = 0;
-  res += FM_I2C_Write(CMD_GET_INT_STATUS, NULL, 0);
-  res += FM_I2C_Read(status, sizeof(status));
   return res;
 }
 

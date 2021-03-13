@@ -5,7 +5,7 @@
 #include "i2c.h"
 #include "gpio.h"
 
-#define I2C_PORT I2C_PORT1
+#define I2C_PORT I2C_PORT2
 #define I2C_ADDRESS 0x22
 #define RX_ChipID 0x9522
 #define TIMEOUT ((uint8_t)20)
