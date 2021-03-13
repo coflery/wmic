@@ -270,41 +270,6 @@ void I2C_WriteByte(uint8_t byte)
 }
 
 /*
-*    函 数 名: I2C_Write
-*    功能说明: IIC总线写数据
-*    形    参: byte：写入的一个字节数据
-*    返 回 值: 无
-*/
-uint8_t I2C_Write(uint8_t byte, uint8_t SlaveAddr)
-{
-#ifndef I2C_HW
-    I2C_WriteByte(byte);
-    return 0;
-#else
-    uint32_t Timeout;
-
-    I2C_TransferHandling(I2CPORT, SlaveAddr, 1, I2C_Reload_Mode, I2C_Generate_Start_Write);
-    Timeout = I2C_TIMEOUT;
-    while (I2C_GetFlagStatus(I2CPORT, I2C_ISR_TXIS) == RESET)
-    {
-        if ((Timeout--) == 0)
-            return -1;
-    }
-    I2C_SendData(I2CPORT, byte);
-
-    Timeout = I2C_TIMEOUT;
-    while (I2C_GetFlagStatus(I2CPORT, I2C_ISR_STOPF) == RESET)
-    {
-        if ((Timeout--) == 0)
-            return -1;
-    }
-
-    I2C_ClearFlag(I2CPORT, I2C_ICR_STOPCF);
-    return 0;
-#endif
-}
-
-/*
 *    函 数 名: I2C_ReadByte
 *    功能说明: IIC总线读数据
 *    形    参: 无

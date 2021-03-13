@@ -88,7 +88,7 @@ uint8_t spdif_init(void)
   // bit 4 - CLKOUT pin disable => 1
   // bit 3 - CLKOUT pin select is CLK1 => 0
   // bit 2:0 - always 0
-  res += SPDIF_I2C_Write(8, B00111000);
+  res += SPDIF_I2C_Write(8, B00110000);
 
   // set masking for interrupts
   res += SPDIF_I2C_Write(10, B01111110); // 1+2+3+4+5+6 => 0111 1110. We only care about unlock and rec_freq

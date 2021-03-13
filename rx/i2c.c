@@ -310,17 +310,6 @@ void I2C_WriteByte(enum i2c_port port, uint8_t byte)
 }
 
 /*
-*    函 数 名: I2C_Write
-*    功能说明: IIC总线写数据
-*    形    参: byte：写入的一个字节数据
-*    返 回 值: 无
-*/
-void I2C_Write(enum i2c_port port, uint8_t byte, uint8_t SlaveAddr)
-{
-    I2C_WriteByte(port, byte);
-}
-
-/*
 *    函 数 名: I2C_ReadByte
 *    功能说明: IIC总线读数据
 *    形    参: 无

@@ -67,7 +67,7 @@
 #define PROP_TX_RDS_FIFO_SIZE 0x2C07          //0x0000 Si4721 Only. Number of blocks reserved for the FIFO. Note that the value written must be one larger than the desired FIFO size.
 
 //	TX configuration
-//#define GPO_IEN			0x0000
+#define GPO_IEN 0x0000
 #define F_CLK 3072000
 #define REFCLK_FREQ 32000
 #define REFCLK_PRESCALE (F_CLK / REFCLK_FREQ)
@@ -111,15 +111,22 @@
 //#define TX_RDS_FIFO_SIZE		0x0000
 
 /* --------------------------------------------------------- */
-
-// si741x/2x power up
-#define FUNC_RX 1         // 1 = Receive
-#define FUNC_TX 2         // 2 = Transmit
-#define OPMODE_ANALOG 80  // 01010000 = Analog audio inputs (LIN/RIN)
-#define OPMODE_DIGITAL 15 // 00001111 = Digital audio inputs (DIN/DFS/DCLK)
+// Power up device and mode selection
+#define CTSI_EN (1 << 7)
+#define GPO2O_EN (1 << 6)
+#define PATCH_EN (1 << 5)
+#define XOSC_EN (1 << 4)
+#define FUNC_FMRX 0                  // 0 = FM receive
+#define FUNC_AMRX 1                  // 1 = AM/SW/LW receive
+#define FUNC_FMTX 2                  // 2 = FM Transmit
+#define FUNC_WBRX 3                  // 3 = WB receive
+#define OPMODE_ANALOG_OUT B00000101  // 00000101 = Analog audio output (LOUT,ROUT)
+#define OPMODE_DIGITAL_IN B00001111  // 00001111 = Digital audio inputs (DCLK,DFS,DIO)
+#define OPMODE_ANALOG_IN B01010000   // 01010000 = Analog audio inputs (LIN,RIN)
+#define OPMODE_DIGITAL_OUT B10110000 // 10110000 = Digital audio output (DCLK,DFS,DIO)
+#define OPMODE_AandD_OUT B10110101   // 10110101 = Digital and analog audio output (LOUT/ROUT,DCLK,DFS,DIO)
 
 /* --------------------------------------------------------- */
-
 // misc
 #define TX_POWER 120 // may be set as high as 120 dBμV
 #define ANTCAP 0     // auto
@@ -150,7 +157,8 @@ typedef struct
   uint8_t RXNoiseLevel;
 } TXTUNE;
 
-uint8_t get_status(uint8_t *status);
+uint8_t get_int_status(uint8_t *status);
+uint8_t tune_status();
 uint8_t wait_stc();
 uint8_t wait_cts();
 /* --------------------------------------------------------- */
@@ -235,15 +243,15 @@ uint8_t wait_stc()
   do
   {
     delay_ms(100);
-    //res = get_status(&status);
-    res = FM_I2C_Read(&status, sizeof(status));
+    res = get_int_status(&status);
+    //res += FM_I2C_Read(&status, sizeof(status));
   } while (res == 0 && !(status & B00000001));
   if (status & B01000000)
     return 2;
+  res += tune_status(); //clear STC_INT bit
   return res;
 }
 
-//si47xx is responding else system reset
 uint8_t wait_cts()
 {
   uint8_t res;
@@ -251,7 +259,6 @@ uint8_t wait_cts()
   do
   {
     delay_ms(100);
-    //res = get_status(&status);
     res = FM_I2C_Read(&status, sizeof(status));
   } while (res == 0 && !(status & B10000000));
   if (status & B01000000)
@@ -264,8 +271,8 @@ uint8_t power_up()
 {
   uint8_t res = 0;
   uint8_t buff[2];
-  buff[0] = FUNC_TX;
-  buff[1] = OPMODE_DIGITAL;
+  buff[0] = FUNC_FMTX;
+  buff[1] = OPMODE_DIGITAL_IN;
   res += FM_I2C_Write(CMD_POWER_UP, buff, sizeof(buff));
   res += wait_cts();
   return res;
@@ -293,7 +300,7 @@ uint8_t set_property(uint16_t property, uint16_t value)
   return res;
 }
 
-uint8_t get_status(uint8_t *status)
+uint8_t get_int_status(uint8_t *status)
 {
   uint8_t res = 0;
   res += FM_I2C_Write(CMD_GET_INT_STATUS, NULL, 0);
@@ -307,8 +314,9 @@ uint8_t get_rev()
   uint8_t res = 0;
   res += FM_I2C_Write(CMD_GET_REV, NULL, 0);
   res += FM_I2C_Read((uint8_t *)(&rev), 9);
-  res += !(rev.Status & 0x80); //response check
-  res += !(rev.PartNum == 20); //chipID check
+  res += (rev.Status & B10000000) ? 0 : 1; //response check
+  res += (rev.PartNum == 20) ? 0 : 2;      //chipID check
+  wait_cts();
   return res;
 }
 
@@ -322,6 +330,18 @@ uint8_t gpio_ctl()
   return res;
 }
 
+uint8_t tune_freq(uint16_t freq)
+{
+  uint8_t res = 0;
+  uint8_t buff[3];
+  buff[0] = 0;
+  buff[1] = freq >> 8;
+  buff[2] = freq;
+  res += FM_I2C_Write(CMD_TX_TUNE_FREQ, buff, sizeof(buff));
+  res += wait_stc();
+  return res;
+}
+
 uint8_t tune_power()
 {
   uint8_t res = 0;
@@ -331,19 +351,7 @@ uint8_t tune_power()
   buff[2] = TX_POWER;
   buff[3] = ANTCAP;
   res = FM_I2C_Write(CMD_TX_TUNE_POWER, buff, sizeof(buff));
-  wait_stc();
-  return res;
-}
-
-uint8_t tune_freq(uint16_t freq)
-{
-  uint8_t res = 0;
-  uint8_t buff[3];
-  buff[0] = 0;
-  buff[1] = freq >> 8;
-  buff[2] = freq;
-  res += FM_I2C_Write(CMD_TX_TUNE_FREQ, buff, sizeof(buff));
-  wait_stc();
+  res += wait_stc();
   return res;
 }
 
@@ -356,7 +364,7 @@ uint8_t tune_measure(uint16_t freq)
   buff[2] = freq;
   buff[3] = ANTCAP;
   res += FM_I2C_Write(CMD_TX_TUNE_MEASURE, buff, sizeof(buff));
-  wait_stc();
+  res += wait_stc();
   return res;
 }
 
@@ -481,8 +489,8 @@ uint8_t fm_init()
   res += power_down();
   res += power_up();
   res += get_rev();
-  res += gpio_ctl();
   res += configure();
+  res += gpio_ctl();
   res += tune_freq(10300);
   res += tune_power();
   res += tune_status();
