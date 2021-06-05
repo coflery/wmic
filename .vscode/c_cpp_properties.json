@@ -1,7 +1,7 @@
 {
     "configurations": [
         {
-            "compilerPath": "C:/Program Files/Git/mingw64/gcc-arm-none-eabi/bin/arm-none-eabi-gcc.exe",
+            "compilerPath": "arm-none-eabi-gcc",
             "name": "STM32",
             "includePath": [
                 "${workspaceFolder}/**"

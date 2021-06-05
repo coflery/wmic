@@ -11,7 +11,7 @@
             "request": "launch",
             "type": "cortex-debug",
             "servertype": "openocd",
-            "serverpath": "C:/Program Files/Git/mingw64/bin/openocd.exe",
+            "serverpath": "openocd",
             "configFiles": [
                 "stlink.cfg",
                 "stm32f0x.cfg"
