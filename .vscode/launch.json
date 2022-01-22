@@ -2,18 +2,18 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "showDevDebugOutput": false,
             "name": "CortexDebug",
             "cwd": "${workspaceRoot}/openocd",
-            "preLaunchTask": "MakeRX",
+            "preLaunchTask": "编译RX",
             "executable": "${workspaceRoot}/output/rx.elf",
-            "svdFile": "${workspaceRoot}/openocd/STM32F0x1.svd",
+            "svdFile": "${workspaceRoot}/openocd/STM32F0xx.svd",
             "request": "launch",
             "type": "cortex-debug",
             "servertype": "openocd",
             "serverpath": "openocd",
             "configFiles": [
-                "stlink.cfg",
+                /* "stlink.cfg", */
+                "ft4232.cfg",
                 "stm32f0x.cfg"
             ]
         }

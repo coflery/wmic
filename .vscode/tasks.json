@@ -2,7 +2,7 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "MakeRX",
+            "label": "编译RX",
             "type": "shell",
             "command": "make",
             "args": [
@@ -33,7 +33,7 @@
             }
         },
         {
-            "label": "MakeTX",
+            "label": "编译TX",
             "type": "shell",
             "command": "make",
             "args": [
@@ -60,11 +60,11 @@
             }
         },
         {
-            "label": "MakeClean",
+            "label": "清除",
             "type": "shell",
             "command": "make",
             "args": [
-                "clean"
+                "distclean"
             ],
             "problemMatcher": [
                 "$gcc"
