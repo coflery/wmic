@@ -6,14 +6,12 @@
 #include <stdbool.h>
 #include "stm32f0xx.h"
 #include "uart.h"
-#include "jtag.h"
 #include "delay.h"
 #include "gpio.h"
 #include "i2c.h"
 #include "rx.h"
 #include "spdif.h"
 #include "fm.h"
-#include "version.h"
 
 /* Private function prototypes -----------------------------------------------*/
 void nvic_config(void);

@@ -1,22 +1,18 @@
-/*  Copyright (C) 2020 WMIC authors
+﻿/*  Copyright (C) 2020 WMIC authors
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 3.
  */
 
 #include "led.h"
 #include "uart.h"
-#include "jtag.h"
 #include "delay.h"
 #include "gpio.h"
 #include "i2c.h"
 #include "tx.h"
-#include "version.h"
 
 int main()
 {
     delay_init();
-    //SW_VERSION_MAJOR,SW_VERSION_MINOR, SW_VERSION_BUILD;
-    //jtag_init();
     gpio_init();
     exti_init();
     delay_ms(1000);
