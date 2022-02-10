@@ -45,7 +45,7 @@ vpath %.s $(SRC_DIR)
 
 STARTUP=startup_stm32f0xx.s
 SRCS=system_stm32f0xx.c stm32_it.c syscalls.c \
-     main.c uart.c jtag.c delay.c gpio.c i2c.c \
+     main.c uart.c delay.c gpio.c i2c.c \
      led.c tx.c
 
 OBJS=$(addprefix $(OBJ_DIR),$(SRCS:.c=.o)) \
