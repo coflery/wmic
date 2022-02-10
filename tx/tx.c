@@ -62,14 +62,14 @@ uint8_t tx_reg_val[48][4] =
         {0xFF, 0xFF, 0xFF, 0xFE}, //REG3F
 };
 
-int8_t init_tx()
+uint8_t TX_Init(uint32_t freq)
 {
   uint8_t i;
   uint8_t addr;
 
   for (i = 0; i <= INIT_FAIL_TIME; i++)
   {
-    delay_ms(20);
+    Delay_ms(20);
     TX_I2C_Read(0x10, reg_val);
     if (reg_val[3] != TX_Chip_ID)
       continue;
@@ -77,7 +77,7 @@ int8_t init_tx()
   }
 
   if (reg_val[3] != TX_Chip_ID)
-    return -1;
+    return 1;
 
   for (i = 1; i <= 48; i++)
   {
@@ -94,7 +94,7 @@ int8_t init_tx()
     TX_I2C_Write(addr, &tx_reg_val[i - 1][0]); //tx_reg_val=tx_48k_vband values
   }
 
-  TX_Set_Band_And_Frequency(805000);
+  TX_Set_Band_And_Frequency(freq);
   TX_Reset_Chip();
   TX_Trigger();
   
@@ -197,7 +197,7 @@ void TX_Trigger()
   TX_I2C_Write(0x03, analog_reg_val[3]);
   analog_reg_val[3][1] |= 0x40; //REG_0x3[22]=1
   TX_I2C_Write(0x03, analog_reg_val[3]);
-  delay_ms(50); //At least delay 30ms
+  Delay_ms(50); //At least delay 30ms
 
   //Calibrate Digital VCO
   analog_reg_val[4][0] &= ~0x02; //REG4[25]=0

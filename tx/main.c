@@ -1,10 +1,9 @@
-﻿/*  Copyright (C) 2020 WMIC authors
+﻿/*  Copyright (C) 2020-2022 Frand Ren
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 3.
  */
 
 #include "led.h"
-#include "uart.h"
 #include "delay.h"
 #include "gpio.h"
 #include "i2c.h"
@@ -12,10 +11,10 @@
 
 int main()
 {
-    delay_init();
+    Delay_Init(INT_1MS);
     gpio_init();
     exti_init();
-    delay_ms(1000);
+    Delay_ms(1000);
     if (GPIO_ReadInputDataBit(GPIOF, GPIO_Pin_1))
     {
         tx_power(DISABLE);
@@ -29,7 +28,7 @@ int main()
     //led_init();
     i2c_init();
     tx_power(ENABLE);
-    init_tx();
+    TX_Init(803000);
 
     GPIO_SetBits(GPIOA, GPIO_Pin_0);
     GPIO_ResetBits(GPIOA, GPIO_Pin_6);
@@ -38,9 +37,9 @@ int main()
     while (1)
     {
         GPIO_SetBits(GPIOA, GPIO_Pin_0);
-        delay_ms(500);
+        Delay_ms(500);
         GPIO_ResetBits(GPIOA, GPIO_Pin_0);
-        delay_ms(500);
+        Delay_ms(500);
 
         if (!GPIO_ReadInputDataBit(GPIOF, GPIO_Pin_1))
         {

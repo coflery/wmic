@@ -1,4 +1,4 @@
-/*  Copyright (C) 2020 WMIC authors
+/*  Copyright (C) 2020-2022 Frand Ren
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 3.
  */
@@ -20,13 +20,14 @@ void uart_init()
     /* Configure USART Tx as alternate function push-pull */
     usart_gpio.GPIO_Mode = GPIO_Mode_AF;
     usart_gpio.GPIO_OType = GPIO_OType_PP;
+    usart_gpio.GPIO_PuPd = GPIO_PuPd_NOPULL;
     usart_gpio.GPIO_Pin = GPIO_Pin_9;
     usart_gpio.GPIO_Speed = GPIO_Speed_50MHz;
     GPIO_Init(GPIOA, &usart_gpio);
 
     /* Configure USART Rx as input floating */
     usart_gpio.GPIO_Mode = GPIO_Mode_IN;
-    usart_gpio.GPIO_PuPd = GPIO_PuPd_NOPULL;
+    usart_gpio.GPIO_PuPd = GPIO_PuPd_UP;
     usart_gpio.GPIO_Pin = GPIO_Pin_10;
     GPIO_Init(GPIOA, &usart_gpio);
 

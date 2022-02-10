@@ -1,4 +1,4 @@
-/*  Copyright (C) 2020 WMIC authors
+/*  Copyright (C) 2020-2022 Frand Ren
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 3.
  */
@@ -14,6 +14,7 @@ void led_init()
 
     led_gpio.GPIO_Mode = GPIO_Mode_OUT;
     led_gpio.GPIO_OType = GPIO_OType_PP;
+    led_gpio.GPIO_PuPd = GPIO_PuPd_NOPULL;
     led_gpio.GPIO_Pin = GPIO_Pin_0 | GPIO_Pin_1;    
     led_gpio.GPIO_Speed = GPIO_Speed_2MHz;
 

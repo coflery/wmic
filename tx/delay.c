@@ -1,57 +1,87 @@
 #include "stm32f0xx.h"
 #include "delay.h"
-#define TIM4_PERIOD    62
 
-void delay_init()
+//每次systick中断触发SystemTime递增
+volatile uint32_t SystemTime = 0;
+
+/**
+  * @brief  初始化延迟功能
+  * @param  TimeBase: SystemTick发生中断的时间基准
+  *     @arg INT_100MS
+  *     @arg INT_10MS
+  *     @arg INT_1MS
+  *     @arg INT_100US
+  *     @arg INT_10US
+  *     @arg INT_1US
+  */
+void Delay_Init(uint32_t TimeBase)
 {
-  SystemCoreClockUpdate();
-  if (SysTick_Config(SystemCoreClock / 1000))
-  {
-    while (1)
-      ;
-  }
+	//systemtick 定时器优先级设置为最高
+	NVIC_SetPriority(SysTick_IRQn, 0);
+	SystemCoreClockUpdate();
+	if (SysTick_Config(SystemCoreClock / TimeBase))
+	{
+		while (1);
+	}
 }
 
-void delay_cycles(uint16_t cycle)
+/**
+  * @brief  等待n个微秒时间
+  * @param  us: 微秒值
+  */
+void Delay_us(uint32_t us)
 {
-    while (cycle != 0)
-    {
-        cycle--;
-    }
+	uint32_t dwCurCounter;				  /* 当前时间计数值 */
+	uint32_t dwPreTickVal = SysTick->VAL; /* 上一次SYSTICK计数值 */
+	uint32_t dwCurTickVal;				  /* 当前的SYSTICK计数值 */
+
+	us = us * (SystemCoreClock / 1000000); /* 需延时时间，共多少时间节拍 */
+	do
+	{
+		dwCurTickVal = SysTick->VAL;
+		if (dwCurTickVal < dwPreTickVal)
+		{
+			//systick是减计数器
+			dwCurCounter = dwCurCounter + dwPreTickVal - dwCurTickVal;
+		}
+		else
+		{
+			//systick是加计数器
+			dwCurCounter = dwCurCounter + dwPreTickVal + SysTick->LOAD - dwCurTickVal;
+		}
+		dwPreTickVal = dwCurTickVal;
+
+	} while (dwCurCounter < us);
 }
 
-void delay_ms(uint16_t nTime)
+/**
+  * @brief  等待n个毫秒时间
+  * @param  ms: 毫秒值(最大65535)
+  */
+void Delay_ms(uint16_t ms)
 {
-  uint32_t setTime = nTime;
-  setTime += SystemTime;
-  while (SystemTime < setTime);
+	uint32_t setTime = ms;
+	setTime += SystemTime;
+	while (SystemTime < setTime);
 }
 
-// void TIM4_Config(void)
-// {
-//   disableInterrupts();
-  
-//   /* TIM4 configuration:
-//    - TIM4CLK is set to 8 MHz, the TIM4 Prescaler is equal to 128 so the TIM1 counter
-//    clock used is 8 MHz / 128 = 62 500 Hz
-//   - With 62 500 Hz we can generate time base:
-//       max time base is 4.096 ms if TIM4_PERIOD = 255 --> (255 + 1) / 62500 = 4.096 ms
-//       min time base is 0.032 ms if TIM4_PERIOD = 1   --> (  1 + 1) / 62500 = 0.032 ms
-//   - In this example we need to generate a time base equal to 1.008 ms
-//    so TIM4_PERIOD = (0.001008 * 62500 - 1) = 62 */
+/**
+  * @brief  等待CPU空转n个周期
+  * @param  cycle: 周期计数
+  */
+void Delay_cycles(uint32_t cycle)
+{
+	while (cycle--);
+}
 
-//   /* Time base configuration */
-//   TIM4_TimeBaseInit(TIM4_PRESCALER_128, TIM4_PERIOD);
-//   /* Clear TIM4 update flag */
-//   TIM4_ClearFlag(TIM4_FLAG_UPDATE);
-//   /* Enable update interrupt */
-//   TIM4_ITConfig(TIM4_IT_UPDATE, ENABLE);
-  
-//   ITC_SetSoftwarePriority(ITC_IRQ_TIM4_OVF,ITC_PRIORITYLEVEL_1);
-  
-//   /* enable interrupts */
-//   enableInterrupts();
-
-//   /* Enable TIM4 */
-//   TIM4_Cmd(ENABLE);
-// }
+/**
+  * @brief  等待一个NOP时间
+  */
+void Delay_nop(void)
+{
+#if __GNUC__
+	asm("NOP");
+#else
+	__nop();
+#endif
+}

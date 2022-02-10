@@ -1,8 +1,7 @@
 #ifndef _TX_H
 #define _TX_H
 
-int8_t init_tx(void);
-
+uint8_t TX_Init(uint32_t freq);
 void TX_Write_ID(uint8_t id_dat);
 void TX_Write_UserData(uint8_t dat);
 void TX_Write_28kHz_SampleMode(void);
