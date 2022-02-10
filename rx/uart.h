@@ -3,8 +3,8 @@
  *  it under the terms of the GNU General Public License version 3.
  */
  
-#ifndef _UART_H_
-#define _UART_H_
+#ifndef _UART_H
+#define _UART_H
 
 void uart_init();
 
