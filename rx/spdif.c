@@ -6,7 +6,6 @@
 #include "gpio.h"
 #include "bitmap.h"
 
-#define I2C_PORT I2C_PORT1
 #define I2C_ADDRESS 0x74
 #define TIMEOUT ((uint8_t)20)
 
@@ -56,7 +55,7 @@ uint8_t spdif_init(void)
 
   for (i = 0; i < TIMEOUT; i++,res=0)
   {
-    delay_ms(20);
+    Delay_ms(20);
     res += SPDIF_I2C_Read(0, &deviceID_L);
     res += SPDIF_I2C_Read(1, &deviceID_H);
     res += SPDIF_I2C_Read(2, &devREV);
@@ -138,43 +137,38 @@ uint8_t SPDIF_I2C_Read(uint8_t reg, uint8_t *pBuf)
   uint8_t res = 0;
 
   /* Send START condition */
-  I2C_Start(I2C_PORT);
+  I2C_BUS_SendStart(&I2C_Bus1);
 
   /* Send slave device address */
-  I2C_WriteByte(I2C_PORT, I2C_ADDRESS & 0xFE);
-  if (I2C_CheckAck(I2C_PORT) == NACK)
+  if(I2C_BUS_SendByte(&I2C_Bus1,I2C_WR(I2C_ADDRESS)) == I2C_NOACK)
   {
     res = 1;
     goto END;
   }
 
   /* Send the slave device reg address to read */
-  I2C_WriteByte(I2C_PORT, reg & 0x7F);
-  if (I2C_CheckAck(I2C_PORT) == NACK)
+  if (I2C_BUS_SendByte(&I2C_Bus1, reg & 0x7F) == I2C_NOACK)
   {
     res = 2;
     goto END;
   }
 
   /* Repeated start signal */
-  I2C_Start(I2C_PORT);
+  I2C_BUS_SendRestart(&I2C_Bus1);
 
   /* Send slave device address */
-  I2C_WriteByte(I2C_PORT, I2C_ADDRESS | 0x01);
-  if (I2C_CheckAck(I2C_PORT) == NACK)
+  if (I2C_BUS_SendByte(&I2C_Bus1, I2C_RD(I2C_ADDRESS)) == I2C_NOACK)
   {
     res = 3;
     goto END;
   }
 
   /* Read reg data */
-  *pBuf = I2C_ReadByte(I2C_PORT);
-  /* Disable Acknowledgement */
-  I2C_NAck(I2C_PORT);
+  *pBuf = I2C_BUS_ReceiveByte(&I2C_Bus1, I2C_NOACK);
 
 END:
   /* Send STOP Condition */
-  I2C_Stop(I2C_PORT);
+  I2C_BUS_SendStop(&I2C_Bus1);
   return res;
 }
 
@@ -183,27 +177,24 @@ uint8_t SPDIF_I2C_Write(uint8_t reg, uint8_t data)
   uint8_t res = 0;
 
   /* Send START condition */
-  I2C_Start(I2C_PORT);
+  I2C_BUS_SendStart(&I2C_Bus1);
 
   /* Send slave device address */
-  I2C_WriteByte(I2C_PORT, I2C_ADDRESS & 0xFE);
-  if (I2C_CheckAck(I2C_PORT) == NACK)
+  if (I2C_BUS_SendByte(&I2C_Bus1, I2C_WR(I2C_ADDRESS)) == I2C_NOACK)
   {
     res = 1;
     goto END;
   }
 
   /* Send the slave device reg address to write */
-  I2C_WriteByte(I2C_PORT, reg & 0x7F);
-  if (I2C_CheckAck(I2C_PORT) == NACK)
+  if (I2C_BUS_SendByte(&I2C_Bus1, reg & 0x7F) == I2C_NOACK)
   {
     res = 2;
     goto END;
   }
 
   /* Send data byte to write */
-  I2C_WriteByte(I2C_PORT, data);
-  if (I2C_CheckAck(I2C_PORT) == NACK)
+  if (I2C_BUS_SendByte(&I2C_Bus1, data) == I2C_NOACK)
   {
     res = 3;
     goto END;
@@ -211,6 +202,6 @@ uint8_t SPDIF_I2C_Write(uint8_t reg, uint8_t data)
 
 END:
   /* Send STOP Condition */
-  I2C_Stop(I2C_PORT);
+  I2C_BUS_SendStop(&I2C_Bus1);
   return res;
 }

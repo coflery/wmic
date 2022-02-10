@@ -166,11 +166,10 @@ uint8_t FM_I2C_Read(uint8_t *pBuf, uint8_t len)
 {
   uint8_t res = 0;
   /* Send START condition */
-  I2C_Start(I2C_PORT);
+  I2C_BUS_SendStart(&I2C_Bus1);
 
   /* Send slave device address */
-  I2C_WriteByte(I2C_PORT, I2C_ADDRESS | 0x01);
-  if (I2C_CheckAck(I2C_PORT) == NACK)
+  if(I2C_BUS_SendByte(&I2C_Bus1,I2C_RD(I2C_ADDRESS)) == I2C_NOACK)
   {
     res = 1;
     goto END;
@@ -179,17 +178,13 @@ uint8_t FM_I2C_Read(uint8_t *pBuf, uint8_t len)
   /* Read reg data */
   for (uint8_t i = 0; i < len; i++)
   {
-    *pBuf = I2C_ReadByte(I2C_PORT);
-    if (len == 1)
-      I2C_NAck(I2C_PORT);
-    else
-      I2C_Ack(I2C_PORT);
+    *pBuf = I2C_BUS_ReceiveByte(&I2C_Bus1, (i + 1) == len ? I2C_NOACK : I2C_ISACK);
     pBuf++;
   }
 
 END:
   /* Send STOP Condition */
-  I2C_Stop(I2C_PORT);
+  I2C_BUS_SendStop(&I2C_Bus1);
   return res;
 }
 
@@ -198,19 +193,17 @@ uint8_t FM_I2C_Write(uint8_t cmd, uint8_t *pBuf, uint8_t len)
   uint8_t res = 0;
 
   /* Send START condition */
-  I2C_Start(I2C_PORT);
+  I2C_BUS_SendStart(&I2C_Bus1);
 
   /* Send slave device address */
-  I2C_WriteByte(I2C_PORT, I2C_ADDRESS & 0xFE);
-  if (I2C_CheckAck(I2C_PORT) == NACK)
+  if(I2C_BUS_SendByte(&I2C_Bus1,I2C_WR(I2C_ADDRESS)) == I2C_NOACK)
   {
     res = 1;
     goto END;
   }
 
   /* Send the write command */
-  I2C_WriteByte(I2C_PORT, cmd);
-  if (I2C_CheckAck(I2C_PORT) == NACK)
+  if(I2C_BUS_SendByte(&I2C_Bus1,cmd) == I2C_NOACK)
   {
     res = 2;
     goto END;
@@ -219,8 +212,7 @@ uint8_t FM_I2C_Write(uint8_t cmd, uint8_t *pBuf, uint8_t len)
   /* Send data bytes to write */
   for (uint8_t i = 0; i < len; i++)
   {
-    I2C_WriteByte(I2C_PORT, *pBuf);
-    if (I2C_CheckAck(I2C_PORT) == NACK)
+    if (I2C_BUS_SendByte(&I2C_Bus1,*pBuf) == I2C_NOACK)
     {
       res = 3;
       goto END;
@@ -230,7 +222,7 @@ uint8_t FM_I2C_Write(uint8_t cmd, uint8_t *pBuf, uint8_t len)
 
 END:
   /* Send STOP Condition */
-  I2C_Stop(I2C_PORT);
+  I2C_BUS_SendStop(&I2C_Bus1);
   return res;
 }
 
@@ -241,7 +233,7 @@ uint8_t wait_stc()
   uint8_t status;
   do
   {
-    delay_ms(100);
+    Delay_ms(100);
     res = FM_I2C_Write(CMD_GET_INT_STATUS, NULL, 0);
     res += FM_I2C_Read(&status, sizeof(status));
   } while (res == 0 && !(status & B00000001));
@@ -257,7 +249,7 @@ uint8_t wait_cts()
   uint8_t status;
   do
   {
-    delay_ms(100);
+    Delay_ms(100);
     res = FM_I2C_Read(&status, sizeof(status));
   } while (res == 0 && !(status & B10000000));
   if (status & B01000000)

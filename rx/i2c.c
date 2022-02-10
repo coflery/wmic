@@ -1,424 +1,401 @@
-#include <stm32f0xx.h>
+#include "stm32f0xx.h"
 #include "i2c.h"
+#include "delay.h"
+#include "led.h"
 
-#define SCL_USE_OD_MODE
-#define SDA_USE_OD_MODE
-
-#define PORT_I2C_SCL1 GPIOA
+#define PORT_I2C_SCL1 GPIOB
 #define PORT_I2C_SCL2 GPIOA
-#define PORT_I2C_SDA GPIOA
+#define PORT_I2C_SCL3 GPIOB
+#define PORT_I2C_SCL4 GPIOB
+#define PORT_I2C_SCL5 GPIOA
+#define PORT_I2C_SDA1 GPIOB
 
-#define PIN_I2C_SCL1 GPIO_Pin_1
-#define PIN_I2C_SCL2 GPIO_Pin_0
-#define PIN_I2C_SDA GPIO_Pin_2
+#define PIN_I2C_SCL1 GPIO_Pin_4
+#define PIN_I2C_SCL2 GPIO_Pin_3
+#define PIN_I2C_SCL3 GPIO_Pin_2
+#define PIN_I2C_SCL4 GPIO_Pin_10
+#define PIN_I2C_SCL5 GPIO_Pin_15
+#define PIN_I2C_SDA1 GPIO_Pin_6
 
-#define RCC_I2C_SCL1 RCC_AHBPeriph_GPIOA
+#define RCC_I2C_SCL1 RCC_AHBPeriph_GPIOB
 #define RCC_I2C_SCL2 RCC_AHBPeriph_GPIOA
-#define RCC_I2C_SDA RCC_AHBPeriph_GPIOA
+#define RCC_I2C_SCL3 RCC_AHBPeriph_GPIOB
+#define RCC_I2C_SCL4 RCC_AHBPeriph_GPIOB
+#define RCC_I2C_SCL5 RCC_AHBPeriph_GPIOA
+#define RCC_I2C_SDA1 RCC_AHBPeriph_GPIOB
 
-static void I2C_Delay(void);
-static void I2C_PinModeOutput(void);
-static void I2C_PinModeInput(void);
-static void I2C_SCL(enum i2c_port port, uint8_t stat);
-static void I2C_SDA(uint8_t stat);
-static uint8_t I2C_ReadSDA(void);
+#define LED_DATA_TRIG() led_data_trig()
 
-
-
-// void nvic_config(void)
-// {
-//     NVIC_InitTypeDef NVIC_InitStructure;
-
-//     /* Reconfigure and enable I2C1 error interrupt to have the higher priority */
-//     NVIC_InitStructure.NVIC_IRQChannel = I2C1_IRQn;
-//     NVIC_InitStructure.NVIC_IRQChannelPriority = 0;
-//     NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
-//     NVIC_Init(&NVIC_InitStructure);
-// }
-// void hw_i2c_gpio_config(void)
-// {
-//     GPIO_InitTypeDef GPIO_InitStructure;
-
-//     RCC_APB1PeriphClockCmd(RCC_APB1Periph_I2C1, ENABLE);
-
-//     /* Configure the I2C clock source. The clock is derived from the HSI */
-//     RCC_I2CCLKConfig(RCC_I2C1CLK_HSI);
-//     /* I2C GPIO clock source */
-//     RCC_AHBPeriphClockCmd(RCC_AHBPeriph_GPIOA, ENABLE);
-
-//     /* GPIO alternate as I2C */
-//     GPIO_PinAFConfig(GPIOA, GPIO_PinSource9, GPIO_AF_4);
-//     GPIO_PinAFConfig(GPIOA, GPIO_PinSource10, GPIO_AF_4);
-
-//     /* Configure I2C pin: SCL */
-//     GPIO_InitStructure.GPIO_Pin = GPIO_Pin_9;
-//     GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF;
-//     GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
-//     GPIO_InitStructure.GPIO_OType = GPIO_OType_OD;
-//     GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
-//     GPIO_Init(GPIOA, &GPIO_InitStructure);
-
-//     /* Configure I2C pin: SDA */
-//     GPIO_InitStructure.GPIO_Pin = GPIO_Pin_10;
-//     GPIO_Init(GPIOA, &GPIO_InitStructure);
-// }
-// void hw_i2c_config(void)
-// {
-//     I2C_InitTypeDef I2C_InitStructure;
-
-//     hw_i2c_gpio_config();
-
-//     /* I2C configuration */
-//     I2C_InitStructure.I2C_Mode = I2C_Mode_I2C;
-//     I2C_InitStructure.I2C_AnalogFilter = I2C_AnalogFilter_Enable;
-//     I2C_InitStructure.I2C_DigitalFilter = 0x00;
-//     I2C_InitStructure.I2C_OwnAddress1 = 0xAA;
-//     I2C_InitStructure.I2C_Ack = I2C_Ack_Enable;
-//     I2C_InitStructure.I2C_AcknowledgedAddress = I2C_AcknowledgedAddress_7bit;
-//     I2C_InitStructure.I2C_Timing = 0x1045061D; //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-//     /* Apply I2C configuration after enabling it */
-//     I2C_Init(I2C1, &I2C_InitStructure);
-
-//     /* I2C Peripheral Enable */
-//     I2C_Cmd(I2C1, ENABLE);
-
-//     /* Enables the I2C SMBus Alert feature */
-//     I2C_SMBusAlertCmd(I2C1, ENABLE);
-//     I2C_ClearFlag(I2C1, I2C_FLAG_ALERT);
-
-//     /* Enable SMBus Alert interrupt */
-//     I2C_ITConfig(I2C1, I2C_IT_ERRI, ENABLE);
-// }
-
-
-/*
-*    函 数 名: i2c_init
-*    功能说明: 初始化IIC接口
-*    形    参: 无
-*    返 回 值: 无
-*/
+/**
+  * @brief  初始化IIC
+  */
 void i2c_init(void)
 {
-    GPIO_InitTypeDef GPIO_InitStructure;
+  GPIO_InitTypeDef GPIO_InitStructure;
 
-    RCC_AHBPeriphClockCmd(RCC_I2C_SCL1, ENABLE);
-    RCC_AHBPeriphClockCmd(RCC_I2C_SCL2, ENABLE);
-    RCC_AHBPeriphClockCmd(RCC_I2C_SDA, ENABLE);
+  RCC_AHBPeriphClockCmd(RCC_I2C_SCL1, ENABLE);
+  RCC_AHBPeriphClockCmd(RCC_I2C_SCL2, ENABLE);
+  RCC_AHBPeriphClockCmd(RCC_I2C_SCL3, ENABLE);
+  RCC_AHBPeriphClockCmd(RCC_I2C_SCL4, ENABLE);
+  RCC_AHBPeriphClockCmd(RCC_I2C_SCL5, ENABLE);
+  RCC_AHBPeriphClockCmd(RCC_I2C_SDA1, ENABLE);
 
-    GPIO_InitStructure.GPIO_Pin = PIN_I2C_SDA;
-    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_OUT;
-    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
-    GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
-#ifdef SDA_USE_OD_MODE
-    GPIO_InitStructure.GPIO_OType = GPIO_OType_OD;
-#endif
-    GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
-    GPIO_SetBits(PORT_I2C_SDA, PIN_I2C_SDA);
-    GPIO_Init(PORT_I2C_SDA, &GPIO_InitStructure);
-
-    GPIO_InitStructure.GPIO_Pin = PIN_I2C_SCL1;
-    GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
-#ifdef SCL_USE_OD_MODE
-    GPIO_InitStructure.GPIO_OType = GPIO_OType_OD;
-#endif
-    GPIO_SetBits(PORT_I2C_SCL1, PIN_I2C_SCL1);
-    GPIO_Init(PORT_I2C_SCL1, &GPIO_InitStructure);
-
-    GPIO_InitStructure.GPIO_Pin = PIN_I2C_SCL2;
-    GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
-#ifdef SCL_USE_OD_MODE
-    GPIO_InitStructure.GPIO_OType = GPIO_OType_OD;
-#endif
-    GPIO_SetBits(PORT_I2C_SCL2, PIN_I2C_SCL2);
-    GPIO_Init(PORT_I2C_SCL2, &GPIO_InitStructure);
-
-    I2C_Stop(I2C_PORT1);
-    I2C_Stop(I2C_PORT2);
+  //SCL1
+  GPIO_InitStructure.GPIO_Pin = PIN_I2C_SCL1;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_OUT;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_10MHz;
+  GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
+  GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
+  GPIO_SetBits(PORT_I2C_SCL1, PIN_I2C_SCL1);
+  GPIO_Init(PORT_I2C_SCL1, &GPIO_InitStructure);
+  //SCL2
+  GPIO_InitStructure.GPIO_Pin = PIN_I2C_SCL2;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_OUT;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_10MHz;
+  GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
+  GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
+  GPIO_SetBits(PORT_I2C_SCL2, PIN_I2C_SCL2);
+  GPIO_Init(PORT_I2C_SCL2, &GPIO_InitStructure);
+  //SCL3
+  GPIO_InitStructure.GPIO_Pin = PIN_I2C_SCL3;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_OUT;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_10MHz;
+  GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
+  GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
+  GPIO_SetBits(PORT_I2C_SCL3, PIN_I2C_SCL3);
+  GPIO_Init(PORT_I2C_SCL3, &GPIO_InitStructure);
+  //SCL4
+  GPIO_InitStructure.GPIO_Pin = PIN_I2C_SCL4;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_OUT;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_10MHz;
+  GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
+  GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
+  GPIO_SetBits(PORT_I2C_SCL4, PIN_I2C_SCL4);
+  GPIO_Init(PORT_I2C_SCL4, &GPIO_InitStructure);
+  //SCL5
+  GPIO_InitStructure.GPIO_Pin = PIN_I2C_SCL5;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_OUT;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_10MHz;
+  GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
+  GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
+  GPIO_SetBits(PORT_I2C_SCL5, PIN_I2C_SCL5);
+  GPIO_Init(PORT_I2C_SCL5, &GPIO_InitStructure);
+  //SDA1
+  GPIO_InitStructure.GPIO_Pin = PIN_I2C_SDA1;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_OUT;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_10MHz;
+  GPIO_InitStructure.GPIO_OType = GPIO_OType_OD;
+  GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
+  GPIO_SetBits(PORT_I2C_SDA1, PIN_I2C_SDA1);
+  GPIO_Init(PORT_I2C_SDA1, &GPIO_InitStructure);
 }
 
-/*
-*    函 数 名: I2C_Delay
-*    功能说明: 延时函数
-*    形    参: 无
-*    返 回 值: 无
-*/
-static void I2C_Delay(void)
+/******************************** I2C1 ********************************/
+void I2C_SetInputSDA1(void)
 {
-#if 0
-    uint8_t time = 1;
-    while (time--)
+  GPIO_InitTypeDef GPIO_InitStructure;
+  GPIO_InitStructure.GPIO_Pin = PIN_I2C_SDA1;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN;
+  GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_10MHz;
+  GPIO_Init(PORT_I2C_SDA1, &GPIO_InitStructure);
+}
+
+void I2C_SetOutputSDA1(void)
+{
+  GPIO_InitTypeDef GPIO_InitStructure;
+  GPIO_InitStructure.GPIO_Pin = PIN_I2C_SDA1;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_OUT;
+  GPIO_InitStructure.GPIO_OType = GPIO_OType_OD;
+  GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_10MHz;
+  GPIO_Init(PORT_I2C_SDA1, &GPIO_InitStructure);
+}
+
+void I2C_SetInputSCL1(void)
+{
+  GPIO_InitTypeDef GPIO_InitStructure;
+  GPIO_InitStructure.GPIO_Pin = PIN_I2C_SCL1;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN;
+  GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_10MHz;
+  GPIO_Init(PORT_I2C_SCL1, &GPIO_InitStructure);
+}
+
+void I2C_SetOutputSCL1(void)
+{
+  GPIO_InitTypeDef GPIO_InitStructure;
+  GPIO_InitStructure.GPIO_Pin = PIN_I2C_SCL1;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_OUT;
+  GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
+  GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_10MHz;
+  GPIO_Init(PORT_I2C_SCL1, &GPIO_InitStructure);
+}
+
+/**
+  * @brief  读取SDA线电平状态
+  * @retval 执行的结果(false:低电平 true:高电平)
+  */
+bool I2C_ReadSDA1(void)
+{
+  return GPIO_ReadInputDataBit(PORT_I2C_SDA1, PIN_I2C_SDA1);
+}
+
+/**
+  * @brief  读取SCL线电平状态
+  * @retval 执行的结果(false:低电平 true:高电平)
+  */
+bool I2C_ReadSCL1(void)
+{
+  return GPIO_ReadInputDataBit(PORT_I2C_SCL1, PIN_I2C_SCL1);
+}
+
+
+/**
+  * @brief  控制SDA线电平状态
+  * @param  isHigh: 输出电平状态
+  *     @arg false: 输出低电平
+  *     @arg true: 输出高电平
+  * @retval 执行的结果(false:成功 true:失败)
+  */
+void I2C_WriteSDA1(bool isHigh)
+{
+  GPIO_WriteBit(PORT_I2C_SDA1, PIN_I2C_SDA1, isHigh);
+}
+
+/**
+  * @brief  控制SCL线电平状态
+  * @param  isHigh: 输出电平状态
+  *     @arg false: 输出低电平
+  *     @arg true: 输出高电平
+  * @retval 执行的结果(false:成功 true:失败)
+  */
+void I2C_WriteSCL1(bool isHigh)
+{
+  GPIO_WriteBit(PORT_I2C_SCL1, PIN_I2C_SCL1, isHigh);
+}
+void I2C_WriteSCL2(bool isHigh)
+{
+  GPIO_WriteBit(PORT_I2C_SCL2, PIN_I2C_SCL2, isHigh);
+}
+void I2C_WriteSCL3(bool isHigh)
+{
+  GPIO_WriteBit(PORT_I2C_SCL3, PIN_I2C_SCL3, isHigh);
+}
+void I2C_WriteSCL4(bool isHigh)
+{
+  GPIO_WriteBit(PORT_I2C_SCL4, PIN_I2C_SCL4, isHigh);
+}
+void I2C_WriteSCL5(bool isHigh)
+{
+  GPIO_WriteBit(PORT_I2C_SCL5, PIN_I2C_SCL5, isHigh);
+}
+
+/*********************** I2C_BUS ************************************/
+/**
+  * @brief  I2C总线发送开始信号
+  * @param  isHigh: 输出电平状态
+  * @retval 执行的结果(false:成功 true:失败)
+  */
+bool I2C_BUS_SendStart(const I2C_BUS *bus)
+{
+  bus->SetSDAIn();
+  bus->SetSCLIn();
+  if (bus->ReadSDA() == false)
+    return true;
+  if (bus->ReadSCL() == false)
+    return true;
+  bus->WriteSDA(true);
+  bus->WriteSCL(true);
+  bus->SetSDAOut();
+  bus->SetSCLOut();
+  Delay_us(bus->Timing->tSU_STA);
+  bus->WriteSDA(false);
+  Delay_us(bus->Timing->tHD_STA);
+  return false;
+}
+
+/**
+  * @brief  I2C总线发送重开始信号
+  */
+void I2C_BUS_SendRestart(const I2C_BUS *bus)
+{
+  bus->WriteSCL(false);
+  Delay_us(bus->Timing->tHD_DAT);
+  bus->WriteSDA(true);
+  bus->SetSDAOut();
+  Delay_us(bus->Timing->tSU_DAT);
+  bus->WriteSCL(true);
+  Delay_us(bus->Timing->tSU_STA);
+  bus->WriteSDA(false);
+  Delay_us(bus->Timing->tHD_STA);
+}
+
+/**
+  * @brief  I2C总线发送停止信号
+  */
+void I2C_BUS_SendStop(const I2C_BUS *bus)
+{
+  bus->WriteSCL(false);
+  bus->SetSCLOut(); //bug fix: force stop in bus busy
+  Delay_us(bus->Timing->tHD_DAT);
+  bus->WriteSDA(false);
+  bus->SetSDAOut();
+  Delay_us(bus->Timing->tSU_DAT);
+  bus->WriteSCL(true);
+  Delay_us(bus->Timing->tSU_STO);
+  bus->WriteSDA(true);
+  Delay_us(bus->Timing->tBUF);
+}
+
+/**
+  * @brief  IIC总线发送数据
+  * @param  data: 待发送的字节
+  * @retval 执行的结果(I2C_ISACK:从机应答 I2C_NOACK:从机无应答)
+  */
+I2C_ACK I2C_BUS_SendByte(const I2C_BUS *bus, uint8_t data)
+{
+  //Send bit one by one
+  for (uint8_t i = 0; i < 8; i++)
+  {
+    bus->WriteSCL(false);
+    Delay_us(bus->Timing->tHD_DAT);
+    bus->WriteSDA(data & 0x80);
+    data <<= 1;
+    bus->SetSDAOut();
+    Delay_us(bus->Timing->tSU_DAT);
+    bus->WriteSCL(true);
+    Delay_us(bus->Timing->tHIGH);
+  }
+  //Read acknowledge
+  bus->WriteSCL(false);
+  Delay_us(bus->Timing->tHD_DAT);
+  bus->SetSDAIn();
+  Delay_us(bus->Timing->tSU_DAT);
+  bus->WriteSCL(true);
+  Delay_us(bus->Timing->tHIGH);
+  LED_DATA_TRIG();
+
+  return (bus->ReadSDA() == false ? I2C_ISACK : I2C_NOACK);
+}
+
+/**
+  * @brief  IIC总线接收数据
+  * @param  ack: 输出电平状态
+  *     @arg I2C_ISACK: 发送应答
+  *     @arg I2C_NOACK: 不发送应答
+  * @retval 读取到的字节
+  */
+uint8_t I2C_BUS_ReceiveByte(const I2C_BUS *bus, I2C_ACK ack)
+{
+  uint8_t data = 0;
+  //Receive bit one by one
+  for (uint8_t i = 0; i < 8; i++)
+  {
+    bus->WriteSCL(false);
+    Delay_us(bus->Timing->tHD_DAT);
+    bus->SetSDAIn();
+    Delay_us(bus->Timing->tSU_DAT);
+    bus->WriteSCL(true);
+    Delay_us(bus->Timing->tHIGH);
+    data <<= 1;
+    data |= (bus->ReadSDA() ? 0x01 : 0x00);
+  }
+  //Write acknowledge
+  bus->WriteSCL(false);
+  Delay_us(bus->Timing->tHD_DAT);
+  bus->WriteSDA(ack == I2C_NOACK);
+  bus->SetSDAOut();
+  Delay_us(bus->Timing->tSU_DAT);
+  bus->WriteSCL(true);
+  Delay_us(bus->Timing->tHIGH);
+  LED_DATA_TRIG();
+  return data;
+}
+
+void DoNothing(void)
+{
+}
+bool GetTrue(void)
+{
+  return true;
+}
+
+/**
+  * @brief  I2C-100KHz时序(单位us)
+  */
+const I2C_TIMING I2C_Timing_100KHz =
     {
-        ;
-    }
-#else
-    __NOP();
-#endif
-}
+        .tHD_STA = 5, /* I2C specification: Min 4.0 us */
+        .tSU_STA = 6, /* I2C specification: Min 4.7 us */
+        .tHD_DAT = 1, /* I2C specification: Max 3.45 us */
+        .tSU_DAT = 1, /* I2C specification: Min 0.25 us */
+        .tSU_STO = 5, /* I2C specification: Min 4.0 us */
+        .tHIGH = 5,   /* I2C specification: Min 4.0 us */
+        .tBUF = 6,    /* I2C specification: Min 4.7 us */
+};
 
-/*
-*    函 数 名: I2C_PinModeOutput
-*    功能说明: 将SDA线的端口设置为输出
-*    形    参: 无
-*    返 回 值: 无
-*/
-static void I2C_PinModeOutput(void)
-{
-#ifndef SDA_USE_OD_MODE
-    GPIO_InitTypeDef GPIO_InitStructure;
-    GPIO_InitStructure.GPIO_Pin = PIN_I2C_SDA;
-    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_OUT;
-    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
-    GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
-    GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
-    GPIO_Init(PORT_I2C_SDA, &GPIO_InitStructure);
-#endif
-}
-
-/*
-*    函 数 名: I2C_PinModeInput
-*    功能说明: 将SDA线的端口设置为输入
-*    形    参: 无
-*    返 回 值: 无
-*/
-static void I2C_PinModeInput(void)
-{
-#ifndef SDA_USE_OD_MODE
-    GPIO_InitTypeDef GPIO_InitStructure;
-    GPIO_InitStructure.GPIO_Pin = PIN_I2C_SDA;
-    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN;
-    GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
-    GPIO_Init(PORT_I2C_SDA, &GPIO_InitStructure);
-#endif
-}
-
-/*
-*    函 数 名: I2C_SCL
-*    功能说明: 控制SCL线电平状态
-*    形    参: stat：0 输出低电平，1 输出高电平
-*    返 回 值: 无
-*/
-static void I2C_SCL(enum i2c_port port, uint8_t stat)
-{
-    if (port == I2C_PORT1)
-        GPIO_WriteBit(PORT_I2C_SCL1, PIN_I2C_SCL1, stat);
-    else if (port == I2C_PORT2)
-        GPIO_WriteBit(PORT_I2C_SCL2, PIN_I2C_SCL2, stat);
-}
-
-/*
-*    函 数 名: I2C_SDA
-*    功能说明: 控制SDA线电平状态
-*    形    参: stat：0 输出低电平，1 输出高电平
-*    返 回 值: 无
-*/
-static void I2C_SDA(uint8_t stat)
-{
-    GPIO_WriteBit(PORT_I2C_SDA, PIN_I2C_SDA, stat);
-}
-
-/*
-*    函 数 名: I2C_ReadSDA
-*    功能说明: 读取SDA线电平状态
-*    形    参: 无
-*    返 回 值: 0 或 1
-*/
-
-static uint8_t I2C_ReadSDA(void)
-{
-    return GPIO_ReadInputDataBit(PORT_I2C_SDA, PIN_I2C_SDA);
-}
-
-/*
-*    函 数 名: I2C_Start
-*    功能说明: IIC总线起始信号
-*    形    参: port：I2C_SCL1 I2C_SCL2
-*    返 回 值: 无
-*/
-void I2C_Start(enum i2c_port port)
-{
-    I2C_PinModeOutput();
-
-    I2C_SDA(1);
-    I2C_Delay();
-    I2C_SCL(port, 1);
-    I2C_Delay();
-
-    I2C_SDA(0);
-    I2C_Delay();
-
-    I2C_SCL(port, 0);
-    I2C_Delay();
-}
-
-/*
-*    函 数 名: I2C_Stop
-*    功能说明: IIC总线停止信号
-*    形    参: 无
-*    返 回 值: 无
-*/
-void I2C_Stop(enum i2c_port port)
-{
-    I2C_PinModeOutput();
-
-    I2C_SCL(port, 0);
-    I2C_SDA(0);
-    I2C_Delay();
-
-    I2C_SCL(port, 1);
-    I2C_Delay();
-    I2C_SDA(1);
-    I2C_Delay();
-}
-
-/*
-*    函 数 名: I2C_WriteByte
-*    功能说明: IIC总线写数据
-*    形    参: byte：写入的一个字节数据
-*    返 回 值: 无
-*/
-void I2C_WriteByte(enum i2c_port port, uint8_t byte)
-{
-    uint8_t i;
-
-    I2C_PinModeOutput();
-
-    I2C_SCL(port, 0);
-    I2C_Delay();
-
-    for (i = 0; i < 8; i++)
+/**
+  * @brief  I2C总线接口
+  */
+const I2C_BUS I2C_Bus1 =
     {
-        if (byte & 0x80)
-        {
-            I2C_SDA(1);
-        }
-        else
-        {
-            I2C_SDA(0);
-        }
-        //I2C_Delay();
-
-        byte = byte << 1;
-
-        I2C_SCL(port, 1);
-        I2C_Delay();
-        I2C_SCL(port, 0);
-        I2C_Delay();
-    }
-
-    I2C_SDA(1);
-}
-
-/*
-*    函 数 名: I2C_ReadByte
-*    功能说明: IIC总线读数据
-*    形    参: 无
-*    返 回 值: recv：读取的一个字节数据
-*/
-uint8_t I2C_ReadByte(enum i2c_port port)
-{
-    uint8_t i;
-    uint8_t recv = 0;
-
-    I2C_PinModeOutput();
-
-    I2C_SDA(1);
-    I2C_Delay();
-
-    I2C_PinModeInput();
-
-    for (i = 0; i < 8; i++)
+        .SetSDAIn = I2C_SetInputSDA1,
+        .SetSDAOut = I2C_SetOutputSDA1,
+        .SetSCLIn = DoNothing,
+        .SetSCLOut = DoNothing,
+        .ReadSDA = I2C_ReadSDA1,
+        .ReadSCL = GetTrue,
+        .WriteSDA = I2C_WriteSDA1,
+        .WriteSCL = I2C_WriteSCL1,
+        .Timing = &I2C_Timing_100KHz,
+};
+const I2C_BUS I2C_Bus2 =
     {
-        recv = recv << 1;
-
-        I2C_SCL(port, 1);
-        I2C_Delay();
-
-        if (I2C_ReadSDA())
-        {
-            recv |= 0x01;
-        }
-        else
-        {
-            recv |= 0x00;
-        }
-
-        I2C_SCL(port, 0);
-        I2C_Delay();
-    }
-
-    return recv;
-}
-
-/*
-*    函 数 名: I2C_Ack
-*    功能说明: IIC总线主机主动应答
-*    形    参: 无
-*    返 回 值: 无
-*/
-void I2C_Ack(enum i2c_port port)
-{
-    I2C_PinModeOutput();
-
-    I2C_SCL(port, 0);
-    I2C_SDA(0);
-    I2C_Delay();
-
-    I2C_SCL(port, 1);
-    I2C_Delay();
-
-    I2C_SCL(port, 0);
-}
-
-/*
-*    函 数 名: I2C_NAck
-*    功能说明: IIC总线主机主动非应答
-*    形    参: 无
-*    返 回 值: 无
-*/
-void I2C_NAck(enum i2c_port port)
-{
-    I2C_PinModeOutput();
-
-    I2C_SCL(port, 0);
-    I2C_SDA(1);
-    I2C_Delay();
-
-    I2C_SCL(port, 1);
-    I2C_Delay();
-
-    I2C_SCL(port, 0);
-}
-
-/*
-*    函 数 名: I2C_CheckAck
-*    功能说明: IIC总线检测应答信号
-*    形    参: 无
-*    返 回 值: 0 应答信号，1 非应答信号 
-*/
-enum ack_bit I2C_CheckAck(enum i2c_port port)
-{
-    uint8_t time = 0;
-
-    I2C_PinModeOutput();
-
-    I2C_SDA(1);
-    I2C_Delay();
-    I2C_SCL(port, 1);
-    I2C_Delay();
-
-    I2C_PinModeInput();
-
-    while (I2C_ReadSDA())
+        .SetSDAIn = I2C_SetInputSDA1,
+        .SetSDAOut = I2C_SetOutputSDA1,
+        .SetSCLIn = DoNothing,
+        .SetSCLOut = DoNothing,
+        .ReadSDA = I2C_ReadSDA1,
+        .ReadSCL = GetTrue,
+        .WriteSDA = I2C_WriteSDA1,
+        .WriteSCL = I2C_WriteSCL2,
+        .Timing = &I2C_Timing_100KHz,
+};
+const I2C_BUS I2C_Bus3 =
     {
-        time++;
-        if (time >= 100)
-        {
-            return NACK;
-        }
-    }
-
-    I2C_SCL(port, 0);
-
-    return ACK;
-}
+        .SetSDAIn = I2C_SetInputSDA1,
+        .SetSDAOut = I2C_SetOutputSDA1,
+        .SetSCLIn = DoNothing,
+        .SetSCLOut = DoNothing,
+        .ReadSDA = I2C_ReadSDA1,
+        .ReadSCL = GetTrue,
+        .WriteSDA = I2C_WriteSDA1,
+        .WriteSCL = I2C_WriteSCL3,
+        .Timing = &I2C_Timing_100KHz,
+};
+const I2C_BUS I2C_Bus4 =
+    {
+        .SetSDAIn = I2C_SetInputSDA1,
+        .SetSDAOut = I2C_SetOutputSDA1,
+        .SetSCLIn = DoNothing,
+        .SetSCLOut = DoNothing,
+        .ReadSDA = I2C_ReadSDA1,
+        .ReadSCL = GetTrue,
+        .WriteSDA = I2C_WriteSDA1,
+        .WriteSCL = I2C_WriteSCL4,
+        .Timing = &I2C_Timing_100KHz,
+};
+const I2C_BUS I2C_Bus5 =
+    {
+        .SetSDAIn = I2C_SetInputSDA1,
+        .SetSDAOut = I2C_SetOutputSDA1,
+        .SetSCLIn = DoNothing,
+        .SetSCLOut = DoNothing,
+        .ReadSDA = I2C_ReadSDA1,
+        .ReadSCL = GetTrue,
+        .WriteSDA = I2C_WriteSDA1,
+        .WriteSCL = I2C_WriteSCL5,
+        .Timing = &I2C_Timing_100KHz,
+};

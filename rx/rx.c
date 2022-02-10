@@ -2,210 +2,284 @@
 #include "stm32f0xx.h"
 #include "delay.h"
 #include "rx.h"
-#include "i2c.h"
 #include "gpio.h"
 
-#define I2C_PORT I2C_PORT2
-#define I2C_ADDRESS 0x22
-#define RX_ChipID 0x9522
-#define TIMEOUT ((uint8_t)20)
+#define I2C_ADDRESS 0x26
+#define RX_ChipID   0x9532
 
-//#define RX_FIFO_INT 0x19
-#define RX_INTS_TRANS_PHASE_LOCK 0x04
-#define RX_INTS_SYM_INT1 0x02
+#define RX_INT_SYMBOL        0x01
+#define RX_INT_PLL_STATE     0x02
+#define RX_INT_FRAME_ERR     0x04
+#define RX_INT_RSSI_EN       0x08
+#define RX_INT_SYMBOL_EN     0x10
+#define RX_INT_PLL_STATE_EN  0x20
+#define RX_INT_RSSI          0x80
+#define RX_INT_FRAME_ERR_EN  0x01
+
 #define RX_NEED_PHASE_UNLOCK 10
-#define RX_PHASELOCK_BIG_DELTAF 0
-#define RX_INTM_TRANS_PHASE_LOCK 0x04
 
-#define RX_GPIO4_Low 0x00
-#define RX_GPIO4_High 0x02
-#define RX_GPIO4_PhaseLock 0x40
+#define RX_GPIO4_Low         0x00
+#define RX_GPIO4_High        0x02
+#define RX_GPIO4_Function2   0x40
 
-uint8_t analog_reg_val[12][4]; //Analog register values,
+uint8_t analog_reg_val[12][4]; //Analog register values
 uint8_t reg_val[4];            //Temporatory register values
-uint8_t bakup_reg_val[4];
 
 uint8_t CtuneBuf[4];
 uint32_t deltaf_last;
 uint8_t AfcCnt;
 
-bool RX1_IRQ = false;
-bool RX2_IRQ = false;
+BK bk9532;
 
-static uint8_t rx_reg_val[53][4] =
+const uint8_t rx_reg_val[38][4] =
     {
-        {0xDF, 0xFF, 0xFF, 0xF8}, //REG0
-        {0x04, 0xD2, 0x80, 0x57}, //REG1
-        {0x89, 0x90, 0xE0, 0x28}, //REG2
-        {0x04, 0x12, 0x06, 0x9F}, //REG3		[21:20]=b10 for VHF,b01 for UHF;[15:13] for freq div select
-        {0x50, 0x88, 0x00, 0x44}, //REG4
-        {0x00, 0x28, 0x03, 0x80}, //REG5
-        {0x5B, 0xED, 0xFB, 0x00}, //REG6
-        {0x1C, 0xAE, 0xC5, 0xAA}, //REG7		[23]=1 Enable XO2=12.288 output;[19:17]=b010 for VHF;[19:17]=b111 for UHF
-        {0xEF, 0xF1, 0x19, 0x4C}, //REG8
-        {0x08, 0x51, 0x13, 0xA2}, //REG9		[2]=0 for 48kHz;[2]=1 for 28kHz
-        {0x00, 0x6F, 0x00, 0x6F}, //REGA
-        {0x1B, 0xD2, 0x58, 0x63}, //REGB
-        {0xF4, 0x25, 0x95, 0x22}, //REG10		Software Ver No:2016/04/25;chip ID:9522
-        {0x00, 0x00, 0x00, 0x00}, //REG11
-        {0x00, 0x08, 0x00, 0xBD}, //REG16
-        {0x00, 0x00, 0x00, 0x00}, //REG17
-        {0x00, 0x00, 0x00, 0x00}, //REG18
-        {0x00, 0x0E, 0x43, 0x00}, //REG19
-        {0x00, 0x00, 0x32, 0xC0}, //REG1A		[8]=0 for 48kHz,[8]=1 for 28kHz
-        {0x41, 0x1E, 0x14, 0x7B}, //REG1B		800.000MHz;0x404DBF25 for 790.000MHz
-        {0x00, 0x07, 0xFC, 0xFA}, //REG1C		[20]=1 enable analog output;[18]=0 enable freq-shift for anti-howling;[17:10] for enable EQ
-        {0x4E, 0x00, 0x4D, 0x00}, //REG1D		RSSI info at GPIO3;[31:16] for high threshold;[15:0] for low threshold
-        {0x00, 0x00, 0x00, 0x00}, //REG1E		|
-        {0x00, 0x00, 0x00, 0x00}, //REG1F		|
-        {0x00, 0x00, 0x00, 0x00}, //REG20		|
-        {0x00, 0x00, 0x00, 0x00}, //REG21		|
-        {0x00, 0x00, 0x00, 0x00}, //REG22		|                  * * * * * * * *          * * * * * * * *
-        {0x00, 0x00, 0x00, 0x00}, //REG23		|                  *                        *             *
-        {0x00, 0x00, 0x00, 0x00}, //REG24		|                  *                        *             *
-        {0x00, 0x00, 0x00, 0x00}, //REG25		|                  *                        *             *
-        {0x00, 0x00, 0x00, 0x00}, //REG26		|     ---->        * * * * * * * *          *             *
-        {0x00, 0x00, 0x00, 0x00}, //REG27		|                  *                        *       *     *
-        {0x00, 0x00, 0x00, 0x00}, //REG28		|                  *                        *         *   *
-        {0x00, 0x00, 0x00, 0x00}, //REG29		|                  *                        *           * *
-        {0x00, 0x00, 0x00, 0x00}, //REG2A		|                  * * * * * * * *          * * * * * * * *
-        {0x00, 0x00, 0x00, 0x00}, //REG2B		|                                                           *
-        {0x00, 0x00, 0x00, 0x00}, //REG2C		|                                                             *
-        {0x00, 0x00, 0x00, 0x00}, //REG2D		|
-        {0x00, 0x00, 0x00, 0x00}, //REG2E		|
-        {0x00, 0x00, 0x00, 0x00}, //REG2F		|
-        {0x00, 0x00, 0x00, 0x00}, //REG30		|
-        {0x00, 0x00, 0x00, 0x00}, //REG31		|
-        {0x12, 0x86, 0x3D, 0x38}, //REG32		[29]=0 ant1@pin6;[29]=1 ant2@pin5;[28]=1 auto select ant;
-        {0x00, 0xD7, 0xD5, 0xF7}, //REG33		[23:0] synchronize word;0x000295E5 for sensitivity test
-        {0x00, 0x00, 0x00, 0x00}, //REG34		[31:0] ID code,pair with transmitter
-        {0x00, 0x00, 0x00, 0x00}, //REG35		[31:0] FIFO received data,read 12 times total 12*32=384bit
-        {0x01, 0x46, 0x02, 0x00}, //REG36		updated,150708 CRC ERROR VERIFY
-        {0x90, 0xF6, 0xAA, 0x29}, //REG37		[23:20]LNA Gain VHF:0xD,UHF:0xF;[7:0]RF threshold for AGC and auto select of dual-ant
-        {0x3F, 0x80, 0x1E, 0x07}, //REG38   [1]=0PCM at slave mode;[1]=1PCM at master mode
-        {0x48, 0x48, 0x48, 0x48}, //REG39		gpio(0-3) in 2-nd alternate function mode(RSSI/I2S/PCM)
-        {0x00, 0x00, 0x00, 0x48}, //REG3A		gpio(4) in 2-nd alternate function mode(PhaseLock)
-        {0x00, 0x78, 0x64, 0x00}, //REG3B
-        {0x00, 0x00, 0x06, 0xD3}, //REG3C		[23:0]=(Fshift*2^24/fsamplerate)freeq-shift at up 5Hz,enable it set REG1C[18]=0
+        {0xDF, 0xFF, 0xFF, 0xF8}, //REG0,|
+        {0x04, 0xD2, 0x80, 0x57}, //REG1,| --->fixed
+        {0x89, 0x90, 0xE0, 0x28}, //REG2,|
+        {0x04, 0x12, 0x06, 0x9F}, //REG3, [21:20]=b10 for VHF,b01 for UHF;[15:13] for freq div select
+        {0x50, 0x88, 0x00, 0x44}, //REG4,|
+        {0x00, 0x28, 0x03, 0x80}, //REG5,| --->fixed
+        {0x5B, 0xED, 0xFB, 0x00}, //REG6,|
+        {0x1C, 0x2E, 0xC5, 0xAA}, //REG7, [23]=1 Enable XO2 output;[19:17]=b010 for VHF,b111 for UHF
+        {0xEF, 0xF1, 0x19, 0x4C}, //REG8, 0xEDCD874C for VHF,0xEFF1194C for UHF
+        {0x08, 0x51, 0x13, 0xA2}, //REG9, update REG9[7]=0-->1,140414
+        {0x00, 0x6F, 0x00, 0x6F}, //REGA,|
+        {0x1B, 0xD2, 0x58, 0x63}, //REGB,| --->fixed
+        {0x00, 0x00, 0x00, 0x00}, //REG2C,|
+        {0x00, 0x00, 0x00, 0xFF}, //REG2D,|
+        {0xF1, 0x28, 0xA0, 0x00}, //REG2E,|--->reverb
+        {0x00, 0x00, 0x2E, 0x91}, //REG2F,|
+        {0x40, 0x40, 0x40, 0x40}, //REG30, GPIO3-O,GPIO2-O,GPIO1-I,GPIO0-I;0x40 for fun2 output,0x3C for fun3 pull-up input
+        {0xD9, 0x02, 0x00, 0x40}, //REG31, [31:30]=b11 48kHz;[22:20]GPIO4-extbit;[19:17]GPIO3-RSSI;[16:14]GPIO2-PCM_DATA;[13:11]GPIO1-PCM_BCLK;[10:8]GPIO0-PCM_LRCK;[7:0]GPIO4-output
+        {0x20, 0xFF, 0xEF, 0x17}, //REG32, [10]=1 auto-mute off
+        {0x10, 0x00, 0x40, 0x00}, //REG33, [31:16] rssi high threshold;[15:0] rssi low threshold
+        {0xFF, 0xFF, 0xFF, 0xFF}, //REG34, [30:24]=0xFFFF EQ15-EQ1 off;[15:0] howing threshold
+        {0x00, 0x00, 0x00, 0x00}, //REG35, [23:0]=350 freq-shift at up 1Hz,enable it set REG36[3]=0
+        {0x0C, 0x00, 0x60, 0xC8}, //REG36, [31]=0 MSB;[30:28]=b000 I2S mode;[27]=0 I2S-Master;[26]=1 I2S on;[13]=1 analog output on;[7]DUF on;[6]reverb off;[3]=0 freq-shift on for anti-howling
+        {0x3E, 0x00, 0x8F, 0x36}, //REG37, [31:25]LRCK-48kHz;[24:13]BCLK-3.072MHz;[12:8]16bit
+        {0x40, 0xD7, 0xD5, 0xF7}, //REG38, [23:0] synchronize word
+        {0x00, 0x00, 0x00, 0x00}, //REG39, [31:0] ID code,pair with transmitter
+        {0x28, 0x02, 0x85, 0x64}, //REG3A,
+        {0x6D, 0x00, 0x08, 0x00}, //REG3B,
+        {0x00, 0x40, 0xFF, 0xFE}, //REG3C,
+        {0x00, 0x00, 0x62, 0x29}, //REG3D,
+        {0x1F, 0x55, 0x4E, 0x6E}, //REG3E,
+        {0x85, 0x68, 0x00, 0x3F}, //REG3F, [26]AFC=ON;[16]=0 ANT1@pin6,[16]=1 ANT2@pin5;[17]=1 auto select ant;[4]=1 i2s_sda_pull_up enable;[3]=1 Hiz at lrck=1
+        {0x00, 0x00, 0x00, 0x00}, //REG59,|
+        {0x00, 0x00, 0x00, 0x00}, //REG5A,|
+        {0x00, 0x00, 0x00, 0x00}, //REG5B,| --->reverb
+        {0x00, 0x00, 0x00, 0x00}, //REG5C,|
+        {0x1F, 0xFF, 0x3F, 0xFF}, //REG5D,
+        {0x00, 0x00, 0x0F, 0x00}, //REG5E,
 };
 
-uint8_t init_rx(void)
+uint8_t RX_I2C_Read(uint8_t reg, uint8_t *pBuf)
 {
-  uint8_t i;
-  uint8_t addr;
-  uint16_t chipID;
-
-  for (i = 0; i < TIMEOUT; i++)
+  uint8_t res = 0;
+  if (reg <= 0x0B) //Analog registers not read directly from chip,recalled from analog_reg_val[][]
   {
-    delay_ms(20);
-    RX_I2C_Read(0x10, reg_val);
-    chipID = reg_val[2] << 8 | reg_val[3];
-    if (chipID != RX_ChipID)
-      continue;
-    break;
+    pBuf[0] = analog_reg_val[reg][0];
+    pBuf[1] = analog_reg_val[reg][1];
+    pBuf[2] = analog_reg_val[reg][2];
+    pBuf[3] = analog_reg_val[reg][3];
+    return 0;
   }
-  if (i == TIMEOUT)
-    return 1;
-
-  for (i = 0; i < 53; i++)
+  else
   {
-    if (i <= 0x0b)
-      addr = i;
-    else if (i <= 0x0d)
-      addr = 4 + i;
-    else if (i <= 0x34)
-      addr = 8 + i;
-    RX_I2C_Write(addr, &rx_reg_val[i][0]); //tx_reg_val=tx_48k_vband values
-  }
-  //blink for write rx regs done
-  for (i = 0; i < 5; i++)
-  {
-    RX_GPIO4_Set(RX_GPIO4_High);
-    delay_ms(100);
-    RX_GPIO4_Set(RX_GPIO4_Low);
-    delay_ms(100);
-  }
-  RX_GPIO4_Set(RX_GPIO4_PhaseLock);
+    /* Send START condition */
+    if (I2C_BUS_SendStart(&bk9532.device))
+    {
+      /* Bus bus busy*/
+      res = 1;
+    }
 
-  delay_ms(20);
-  RX_Set_Band_And_Frequency(805000);
-  RX_Reset_Chip();
-  RX_Trigger();
+    /* Send slave device address */
+    if (I2C_BUS_SendByte(&bk9532.device, I2C_ADDRESS) == I2C_NOACK)
+    {
+      res = 2;
+      goto END;
+    }
 
-  return 0;
+    /* Send the slave device reg address to read */
+    if (I2C_BUS_SendByte(&bk9532.device, I2C_RD((reg << 1))) == I2C_NOACK)
+    {
+      res = 3;
+      goto END;
+    }
+
+    uint8_t len = 4;
+    /* Read regs data */
+    for (uint8_t i = 0; i < len; i++)
+    {
+      *pBuf = I2C_BUS_ReceiveByte(&bk9532.device, (i + 1) == len ? I2C_NOACK : I2C_ISACK);
+      pBuf++;
+    }
+  }
+END:
+  /* Send STOP Condition */
+  I2C_BUS_SendStop(&bk9532.device);
+  return res;
 }
 
-void RX_RF_UnLock_Check(void)
+uint8_t RX_I2C_Write(uint8_t reg, uint8_t *pBuf)
 {
-  RX_I2C_Read(0x15, reg_val);
-  if (reg_val[3] & 0x03) //RX unlock
+  uint8_t res = 0;
+  if (reg <= 0x0B) //Analog registers saved by analog_reg_val[][] for read operation
   {
-    RX_Trigger();
+    analog_reg_val[reg][0] = pBuf[0];
+    analog_reg_val[reg][1] = pBuf[1];
+    analog_reg_val[reg][2] = pBuf[2];
+    analog_reg_val[reg][3] = pBuf[3];
   }
+
+  /* Send START condition */
+  if (I2C_BUS_SendStart(&bk9532.device))
+  {
+    /* Bus bus busy*/
+    res = 1;
+  }
+
+  /* Send slave device address */
+  if (I2C_BUS_SendByte(&bk9532.device, I2C_ADDRESS) == I2C_NOACK)
+  {
+    res = 2;
+    goto END;
+  }
+
+  /* Send the slave device reg address to write */
+  if (I2C_BUS_SendByte(&bk9532.device, I2C_WR(reg << 1)) == I2C_NOACK)
+  {
+    res = 3;
+    goto END;
+  }
+
+  /* Send data bytes to write */
+  for (uint8_t i = 0; i < 4; i++)
+  {
+    if (I2C_BUS_SendByte(&bk9532.device, *pBuf) == I2C_NOACK)
+    {
+      res = 4;
+      goto END;
+    }
+    pBuf++;
+  }
+
+END:
+  /* Send STOP Condition */
+  I2C_BUS_SendStop(&bk9532.device);
+  return res;
 }
 
-/*
-*    函 数 名: RX_Set_Band_And_Frequency
-*    功能说明: 设置接收的频率
-*    形    参: freq：要设置的频率(单位:kHz)
-*    返 回 值: 0:成功 其他:频率超过范围
-*/
-uint8_t RX_Set_Band_And_Frequency(uint64_t freq)
+/**
+ * @brief 设置接收的频率(160-270MHz 500-980MHz)
+ * @param freq 要设置的频率(单位:kHz)
+ * @return uint8_t 0:成功 其他:频率超过范围
+ */
+uint8_t RX_Set_Band_And_Frequency(uint32_t freq)
 {
-  //Only for UHF
-  if (freq < 500000 || freq > 980000)
+  RF select;
+  uint8_t R03_21_20;
+  uint8_t R03_15_13;
+  uint32_t R0D;
+
+  if (freq >= 160000 && freq <= 178000)
+    select = V160_178;
+  else if (freq > 178000 && freq <= 270000)
+    select = V178_270;
+  else if (freq >= 500000 && freq <= 710000)
+    select = U500_710;
+  else if (freq > 710000 && freq <= 980000)
+    select = U710_980;
+  else
     return 1;
 
-  analog_reg_val[3][1] &= ~0x20; //REG3[21]=0
-  analog_reg_val[3][1] |= 0x10;  //REG3[20]=1
-  analog_reg_val[3][2] &= ~0xE0; //REG3[15:13]=0
-  if (freq < 750800)
-    analog_reg_val[3][2] |= 0x20; //REG3[15:13]=1	// frequency < 750.8M reserved the line,else comment it.
+  //R03 R0D
+  if (select == V160_178)
+  {
+    R03_21_20 = 0b10;
+    R03_15_13 = 0b010;
+    R0D = (uint32_t)((freq + 163.84) * 24 * 0x800000 / 24576);
+  }
+  else if (select == V178_270)
+  {
+    R03_21_20 = 0b10;
+    R03_15_13 = 0b001;
+    R0D = (uint32_t)((freq + 163.84) * 16 * 0x800000 / 24576);
+  }
+  else if (select == U500_710)
+  {
+    R03_21_20 = 0b01;
+    R03_15_13 = 0b001;
+    R0D = (uint32_t)((freq + 163.84) * 6 * 0x800000 / 24576);
+  }
+  else if (select == U710_980)
+  {
+    R03_21_20 = 0b01;
+    R03_15_13 = 0b000;
+    R0D = (uint32_t)((freq + 163.84) * 4 * 0x800000 / 24576);
+  }
+
+  analog_reg_val[3][1] &= ~0x30; //REG3[21:20]=0b00
+  analog_reg_val[3][2] &= ~0xE0; //REG3[15:13]=0b000
+  analog_reg_val[3][1] |= R03_21_20 << 4;
+  analog_reg_val[3][2] |= R03_15_13 << 5;
   RX_I2C_Write(0x03, analog_reg_val[3]);
 
-  analog_reg_val[7][1] |= 0x0E; //REG7[19:17]=7
-  RX_I2C_Write(0x07, analog_reg_val[7]);
+  reg_val[0] = R0D >> 24;
+  reg_val[1] = R0D >> 16;
+  reg_val[2] = R0D >> 8;
+  reg_val[3] = R0D >> 0;
+  RX_I2C_Write(0x0D, reg_val);
 
-  analog_reg_val[8][1] &= ~0x0C; //REG8[19:18]=0
-  analog_reg_val[8][1] |= 0x30;  //REG8[21:20]=3
-  RX_I2C_Write(0x08, analog_reg_val[8]);
+  //R07 R08 R3E
+  if (select == V160_178 || select == V178_270)
+  {
+    analog_reg_val[7][1] &= ~0x0E; //REG7[19:17]=0b000
+    analog_reg_val[7][1] |= 0x04;  //REG7[19:17]=0b010
+    RX_I2C_Write(0x07, analog_reg_val[7]);
 
-  uint32_t value;
-  if (freq >= 160000 && freq <= 178000)
-    value = (uint32_t)((freq + 163.84) * 24 * 0x800000 / 24576);
-  else if (freq > 178000 && freq <= 270000)
-    value = (uint32_t)((freq + 163.84) * 16 * 0x800000 / 24576);
-  else if (freq >= 500000 && freq <= 710000)
-    value = (uint32_t)((freq + 163.84) * 6 * 0x800000 / 24576);
-  else if (freq > 710000 && freq <= 980000)
-    value = (uint32_t)((freq + 163.84) * 4 * 0x800000 / 24576);
-  else
-    return 2;
+    analog_reg_val[8][0] = 0xED;
+    analog_reg_val[8][1] = 0xCD;
+    analog_reg_val[8][2] = 0x87;
+    analog_reg_val[8][3] = 0x4C;
+    RX_I2C_Write(0x08, analog_reg_val[8]);
 
-  reg_val[0] = (value >> 24) & 0xff;
-  reg_val[1] = (value >> 16) & 0xff;
-  reg_val[2] = (value >> 8) & 0xff;
-  reg_val[3] = (value >> 0) & 0xff;
+    RX_I2C_Read(0x3E, reg_val);
+    reg_val[0] &= ~0x0F; //REG3E[27:24]=0b0000
+    reg_val[0] |= 0x0D;  //REG3E[27:24]=0b1101
+    RX_I2C_Write(0x3E, reg_val);
+  }
+  else if (select == U500_710 || select == U710_980)
+  {
+    analog_reg_val[7][1] |= 0x0E; //REG7[19:17]=0b111
+    RX_I2C_Write(0x07, analog_reg_val[7]);
 
-  //RX freq set 700MHz
-  // reg_val[0] = 0x55;
-  // reg_val[1] = 0x78;
-  // reg_val[2] = 0x1E;
-  // reg_val[3] = 0xB8;
-  RX_I2C_Write(0x1B, reg_val);
+    analog_reg_val[8][0] = 0xEF;
+    analog_reg_val[8][1] = 0xF1;
+    analog_reg_val[8][2] = 0x19;
+    analog_reg_val[8][3] = 0x4C;
+    RX_I2C_Write(0x08, analog_reg_val[8]);
+
+    RX_I2C_Read(0x3E, reg_val);
+    reg_val[0] |= 0x0F; //REG3E[27:24]=0b1111
+    RX_I2C_Write(0x3E, reg_val);
+  }
   return 0;
 }
 
 void RX_Reset_Chip(void)
 {
-  RX_I2C_Read(0x1a, reg_val);
-  reg_val[3] &= ~0x80; //REG1A[7]=0
-  RX_I2C_Write(0x1a, reg_val);
-  reg_val[3] |= 0x80; //REG1A[7]=1
-  RX_I2C_Write(0x1a, reg_val);
+  RX_I2C_Read(0x3F, reg_val);
+  reg_val[3] &= ~0x20; //REG3F[5]=0
+  RX_I2C_Write(0x3F, reg_val);
+  reg_val[3] |= 0x20; //REG3F[5]=1
+  RX_I2C_Write(0x3F, reg_val);
 }
 
-//RX mode,trigger chip to calibrate
+/**
+ * @brief 接收模式,触发一次芯片完成校准
+ *
+ */
 void RX_Trigger(void)
 {
   //Enable calibration clock
@@ -217,7 +291,7 @@ void RX_Trigger(void)
   RX_I2C_Write(0x03, analog_reg_val[3]);
   analog_reg_val[3][1] |= 0x40; //REG3[22]=1
   RX_I2C_Write(0x03, analog_reg_val[3]);
-  delay_ms(5); //At least delay 2ms
+  Delay_ms(3); //At least delay 2ms
 
   //Calibrate Digital VCO
   analog_reg_val[4][0] &= ~0x02; //REG4[25]=0
@@ -237,25 +311,26 @@ void RX_Force_PhaseUnlock(void)
   reg_val[2] &= 0x0f;  //sync_unlock_win = 0,for fast unlock
   RX_I2C_Write(0x32, reg_val);
 
-  {
-    delay_ms(2); //请确保该处延时大于或等于2ms
-    RX_I2C_Read(0x32, reg_val);
-    reg_val[3] &= ~0x10; //rx_en = 0
-    reg_val[2] |= 0x30;  //sync_unlock_win = 3
-    RX_I2C_Write(0x32, reg_val);
-    reg_val[3] |= 0x18; //rx_en = 1,cfg_whiten_en=1
-    RX_I2C_Write(0x32, reg_val);
-    delay_ms(2); //请确保该处延时大于或等于2ms
-  }
-  //RX_PreventPop();
+  Delay_ms(2); //请确保该处延时大于或等于2ms
+  RX_I2C_Read(0x32, reg_val);
+  reg_val[3] &= ~0x10; //rx_en = 0
+  reg_val[2] |= 0x30;  //sync_unlock_win = 3
+  RX_I2C_Write(0x32, reg_val);
+  reg_val[3] |= 0x18; //rx_en = 1,cfg_whiten_en=1
+  RX_I2C_Write(0x32, reg_val);
+  Delay_ms(2); //请确保该处延时大于或等于2ms
 }
 
 void RX_PreventPop(void)
 {
   uint8_t FIFO_Num;
 
-  RX_I2C_Read(0x16, reg_val);
-  FIFO_Num = reg_val[1] & 0x3f; //read REG16[21:16]=audio FIFO count
+  RX_I2C_Read(0x7B, reg_val);
+  FIFO_Num = reg_val[0] & 0x3F; //read REG7B[10:0]=PLC FIFO count
+  FIFO_Num <<= 8;
+  FIFO_Num |= reg_val[1] & 0xF8;
+  FIFO_Num >>= 3;
+
   if (FIFO_Num >= 28)
   {
     RX_Force_PhaseUnlock(); //force Lock to UnLock, reset RX state
@@ -264,18 +339,22 @@ void RX_PreventPop(void)
 
 void RX_Cali_FreqOffset(void)
 {
-  uint8_t fifo_num, ctune;
+  uint16_t fifo_num, ctune;
   uint32_t temp_val;
   int32_t deltaf, x_val;
 
-  RX_I2C_Read(0x16, reg_val);
-  RX_I2C_Read(0x1a, CtuneBuf);
+  RX_I2C_Read(0x7B, reg_val);
+  RX_I2C_Read(0x38, CtuneBuf);
 
-  fifo_num = reg_val[1] & 0x3f; //read REG16[21:16]=audio FIFO count
+  fifo_num = reg_val[0] & 0x3F; //read REG7B[10:0]=PLC FIFO count
+  fifo_num <<= 8;
+  fifo_num |= reg_val[1] & 0xF8;
+  fifo_num >>= 3;
+
   temp_val = reg_val[2];
   temp_val = temp_val << 8;
   temp_val += reg_val[3];
-  temp_val = (temp_val + 16384) & 0x7fff; //remove bit15
+  temp_val = (temp_val + 16384) & 0x7FFF; //remove bit15
   deltaf = temp_val - 16384;
   deltaf = deltaf / 128; //read REG16[14:0]=delta freq,unit is ppm
 
@@ -318,35 +397,28 @@ void RX_Cali_FreqOffset(void)
     }
   }
 
-  ctune = CtuneBuf[3] & 0x7f;
+  ctune = CtuneBuf[0] & 0x7F;
   x_val = ctune - x_val;
 
   if (x_val > 127)
-    x_val = 0x7f;
+    x_val = 127;
   else if (x_val < 0)
-    x_val = 0x0;
+    x_val = 0;
 
-  CtuneBuf[3] = (CtuneBuf[3] & 0x80) | (x_val & 0x7f); //update crystal capacitors
+  CtuneBuf[0] = (CtuneBuf[0] & 0x80) | (x_val & 0x7F); //update crystal capacitors
 }
 
 void RX_Frequency_Tracking(void)
 {
-  RX_I2C_Read(0x19, reg_val);
-  reg_val[3] = RX_INTS_SYM_INT1; //clear the symbot interrupt INT1
-  RX_I2C_Write(0x19, reg_val);
+  RX_I2C_Read(0x31, reg_val);
+  reg_val[0] |= RX_INT_SYMBOL; //clear the symbot interrupt
+  RX_I2C_Write(0x31, reg_val);
 
-  delay_ms(2); //请确保该处延时大于或等于2ms
-  if (RX1_IRQ)
+  Delay_ms(2); //请确保该处延时大于或等于2ms
+  if (BK1_IRQ())
   {
     RX_Cali_FreqOffset();
-    RX_I2C_Write(0x1a, CtuneBuf); //Update_Ctune
-    RX1_IRQ = false;
-  }
-  else if (RX2_IRQ)
-  {
-    RX_Cali_FreqOffset();
-    RX_I2C_Write(0x1a, CtuneBuf); //Update_Ctune
-    RX2_IRQ = false;
+    RX_I2C_Write(0x38, CtuneBuf); //Update_Ctune
   }
   else
   {
@@ -366,36 +438,42 @@ void RX_GPIO4_Set(uint8_t mode)
   {
   case RX_GPIO4_Low:
   case RX_GPIO4_High:
-  case RX_GPIO4_PhaseLock:
-    RX_I2C_Read(0x3A, reg_val);
+  case RX_GPIO4_Function2:
+    RX_I2C_Read(0x31, reg_val);
     reg_val[3] = mode;
-    RX_I2C_Write(0x3A, reg_val);
+    RX_I2C_Write(0x31, reg_val);
   }
 }
 
 void RX_Audio_Output_Set(bool Enable)
 {
-  RX_I2C_Read(0x1c, reg_val);
+  RX_I2C_Read(0x36, reg_val);
   if (Enable)
-    reg_val[1] |= 0x10; //Reg0x1c [20]=1;audio_out_en=1;
+    reg_val[2] |= 0x20; //REG36h [13]=1,audio_out_en=1;
   else
-    reg_val[1] &= ~0x10; //Reg0x1c [20]=1;audio_out_en=1;
-  RX_I2C_Write(0x1c, reg_val);
+    reg_val[2] &= ~0x20; //REG36h [13]=0,audio_out_en=0;
+  RX_I2C_Write(0x36, reg_val);
 }
 
-bool RX_Check_PhaseLock(void)
+void RX_Check_PhaseLock(uint8_t index)
 {
-  uint8_t lock;
+  bk9532.bus_busy = true;
+  //选择总线
+  if (RX_Set_I2C_Bus(index))
+    return;
 
-  RX_I2C_Read(0x19, reg_val);
-  lock = reg_val[3] & 0x20;
-  return (lock > 0);
+  uint8_t lock;
+  RX_I2C_Read(0x75, reg_val);
+  lock = reg_val[2] & 0x08;
+  //点亮对应的接收LED
+  RX_GPIO4_Set(lock ? RX_GPIO4_High : RX_GPIO4_Low);
+  bk9532.bus_busy = false;
 }
 
 uint8_t RX_Read_RSSI(void)
 {
-  RX_I2C_Read(0x19, reg_val);
-  return (reg_val[1]);
+  RX_I2C_Read(0x75, reg_val);
+  return reg_val[3];
 }
 
 void RX_Write_ID(uint8_t id_dat)
@@ -404,122 +482,175 @@ void RX_Write_ID(uint8_t id_dat)
   reg_val[1] = 0x00;
   reg_val[2] = 0x00;
   reg_val[3] = id_dat;
-  RX_I2C_Write(0x34, reg_val);
+  RX_I2C_Write(0x39, reg_val);
 }
 
 uint8_t RX_Read_UserData(void)
 {
-  RX_I2C_Read(0x19, reg_val); //read specific data
-  return (reg_val[2]);
+  RX_I2C_Read(0x7C, reg_val);
+  return reg_val[3];
 }
 
-void RX_Set_SampleRate_28kHz(void)
+/**
+ * @brief 接收模式,设置采样率为32kHz
+ *
+ */
+void RX_Set_SampleRate_32kHz(void)
 {
-  analog_reg_val[9][3] |= 0x04; //REG9[2]=1
+  analog_reg_val[9][0] &= 0x7F; //REG9[31]=0
   RX_I2C_Write(0x09, analog_reg_val[9]);
 
-  RX_I2C_Read(0x1A, reg_val);
-  reg_val[2] |= 0x01; //REG1A[8]=1
-  RX_I2C_Write(0x1A, reg_val);
+  analog_reg_val[5][0] &= ~0x18; //REG5[28:27]=00
+  analog_reg_val[5][0] |= 0x08;  //REG5[28:27]=01
+  RX_I2C_Write(0x05, analog_reg_val[5]);
 
-  RX_I2C_Read(0x32, reg_val);
-  reg_val[3] |= 0x02; //REG32[1]=1
-  RX_I2C_Write(0x32, reg_val);
+  RX_I2C_Read(0x31, reg_val);
+  reg_val[0] &= ~0xC0; //REG31[31:30]=00
+  reg_val[0] |= 0x80;  //REG31[31:30]=10
+  RX_I2C_Write(0x31, reg_val);
 }
 
-uint8_t RX_I2C_Write(uint8_t reg, uint8_t *pBuf)
+void RX_RF_UnLock_Check(void)
 {
-  uint8_t res = 0;
-  if (reg <= 0x0b) //Analog registers saved by analog_reg_val[][] for read operation
+  RX_I2C_Read(0x73, reg_val);
+  if (reg_val[3] & 0x02) //RX unlock
   {
-    analog_reg_val[reg][0] = pBuf[0];
-    analog_reg_val[reg][1] = pBuf[1];
-    analog_reg_val[reg][2] = pBuf[2];
-    analog_reg_val[reg][3] = pBuf[3];
+    RX_Trigger();
   }
-
-  /* Send START condition */
-  I2C_Start(I2C_PORT);
-
-  /* Send slave device address */
-  I2C_WriteByte(I2C_PORT, I2C_ADDRESS);
-  if (I2C_CheckAck(I2C_PORT) == NACK)
-  {
-    res = 1;
-    goto END;
-  }
-
-  /* Send the slave device reg address to write */
-  I2C_WriteByte(I2C_PORT, reg << 1);
-  if (I2C_CheckAck(I2C_PORT) == NACK)
-  {
-    res = 2;
-    goto END;
-  }
-
-  /* Send data bytes to write */
-  for (uint8_t i = 0; i < 4; i++)
-  {
-    I2C_WriteByte(I2C_PORT, pBuf[i]);
-    if (I2C_CheckAck(I2C_PORT) == NACK)
-    {
-      res = 3;
-      goto END;
-    }
-  }
-
-END:
-  /* Send STOP Condition */
-  I2C_Stop(I2C_PORT);
-  return res;
 }
 
-uint8_t RX_I2C_Read(uint8_t reg, uint8_t *pBuf)
+void RX_IRQ(uint8_t index)
 {
-  uint8_t res = 0;
-  if (reg <= 0x0b) //Analog registers not read directly from chip,recalled from analog_reg_val[][]
+  if (bk9532.bus_busy || RX_Set_I2C_Bus(index))
   {
-    pBuf[0] = analog_reg_val[reg][0];
-    pBuf[1] = analog_reg_val[reg][1];
-    pBuf[2] = analog_reg_val[reg][2];
-    pBuf[3] = analog_reg_val[reg][3];
-    return 0;
+    return;
   }
+
+  RX_I2C_Read(0x31, reg_val);
+  if (reg_val[0] & RX_INT_SYMBOL)
+  {
+  }
+  if (reg_val[0] & RX_INT_PLL_STATE)
+  {
+  }
+  if (reg_val[0] & RX_INT_FRAME_ERR)
+  {
+  }
+  if (reg_val[1] & RX_INT_RSSI)
+  {
+  }
+  //RX_I2C_Write(0x31, reg_val);
+}
+
+/**
+ * @brief 根据设备号选择所在的I2C总线
+ *
+ * @param index 设备号
+ * @return true 失败
+ * @return false 成功
+ */
+bool RX_Set_I2C_Bus(uint8_t index)
+{
+  switch (index)
+  {
+  case 1:
+    bk9532.device = I2C_Bus1;
+    break;
+  case 2:
+    bk9532.device = I2C_Bus2;
+    break;
+  case 3:
+    bk9532.device = I2C_Bus3;
+    break;
+  case 4:
+    bk9532.device = I2C_Bus4;
+    break;
+  default:
+    return true;
+  }
+  return false;
+}
+
+/**
+ * @brief 输出I2S数据时候的LRCK电平
+ * @param DataOutAtLRCK true:高电平输出 false:低电平输出
+ */
+void RX_Set_LRCK_DataOut(bool DataOutAtLRCK)
+{
+  RX_I2C_Read(0x3F, reg_val);
+  if (DataOutAtLRCK)
+    reg_val[3] &= ~0x08;
   else
+    reg_val[3] |= 0x08;
+  RX_I2C_Write(0x3F, reg_val);
+}
+
+/**
+ * @brief 初始化接收设备
+ * @param index 设备号
+ * @param freq 接收频率(单位:kHz)
+ * @param DataOutAtLRCK 输出I2S数据时候的LRCK电平
+ * @return uint8_t 成功 其他:失败
+ */
+uint8_t RX_Init(uint8_t index, uint32_t freq, bool DataOutAtLRCK)
+{
+  //选择总线
+  if (RX_Set_I2C_Bus(index))
   {
-    /* Send START condition */
-    I2C_Start(I2C_PORT);
+    return 1;
+  }
+  bk9532.bus_busy = true;
 
-    /* Send slave device address */
-    I2C_WriteByte(I2C_PORT, I2C_ADDRESS);
-    if (I2C_CheckAck(I2C_PORT) == NACK)
-    {
-      res = 1;
-      goto END;
-    }
+  //check if chip is online
+  for (uint8_t i = 0; i < 10; i++)
+  {
+    if (RX_I2C_Read(0x70, reg_val))
+      return 2;
 
-    /* Send the slave device reg address to read */
-    I2C_WriteByte(I2C_PORT, (reg << 1) | 0x01);
-    if (I2C_CheckAck(I2C_PORT) == NACK)
-    {
-      res = 2;
-      goto END;
-    }
+    uint16_t chipID = reg_val[2] << 8 | reg_val[3];
+    if (chipID == RX_ChipID)
+      break;
+    if (i + 1 == 10)
+      return 3;
+    Delay_ms(25);
+  }
 
-    /* Read regs data */
-    for (uint8_t i = 0; i < 4; i++)
+  //chip software reset
+  RX_Reset_Chip();
+
+  //write regs table
+  for (uint8_t addr, i = 0; i < 38; i++)
+  {
+    if (i <= 0x0B)
+      addr = i;
+    else if (i <= 0x1F)
+      addr = 32 + i;
+    else if (i <= 0x25)
+      addr = 57 + i;
+    if (RX_I2C_Write(addr, (uint8_t *)rx_reg_val[i]))
     {
-      pBuf[i] = I2C_ReadByte(I2C_PORT);
-      if (i + 1 < 4)
-        /* Acknowledgement */
-        I2C_Ack(I2C_PORT);
-      else
-        /* Disable Acknowledgement */
-        I2C_NAck(I2C_PORT);
+      return 4;
     }
   }
-END:
-  /* Send STOP Condition */
-  I2C_Stop(I2C_PORT);
-  return res;
+
+  RX_Set_LRCK_DataOut(DataOutAtLRCK);
+
+  //blink for write rx regs done
+  for (uint8_t i = 0; i < 6; i++)
+  {
+    RX_GPIO4_Set(RX_GPIO4_High);
+    Delay_ms(10 * i);
+    RX_GPIO4_Set(RX_GPIO4_Low);
+    Delay_ms(10 * i);
+  }
+  RX_GPIO4_Set(RX_GPIO4_Function2);
+
+  if (RX_Set_Band_And_Frequency(freq))
+  {
+    return 5;
+  }
+  RX_Trigger();
+
+  bk9532.bus_busy = false;
+  return 0;
 }

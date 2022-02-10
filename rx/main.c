@@ -1,4 +1,4 @@
-/*  Copyright (C) 2020-2022 WMIC authors
+/*  Copyright (C) 2020-2022 Frand Ren
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 3.
  */
@@ -9,51 +9,44 @@
 #include "delay.h"
 #include "gpio.h"
 #include "i2c.h"
+#include "spi.h"
 #include "rx.h"
-#include "spdif.h"
-#include "fm.h"
+#include "nrf.h"
 
-/* Private function prototypes -----------------------------------------------*/
-void nvic_config(void);
-void hw_i2c_config(void);
 
-uint8_t res;
+bool NRF1_IRQ = false;
+bool NRF2_IRQ = false;
+bool KEY1_IRQ = false;
+bool KEY2_IRQ = false;
+bool KEY3_IRQ = false;
+
 int main(void)
 {
-    jtag_init();
-    delay_init();
+    Delay_Init(INT_1MS);
     gpio_init();
     exti_init();
+    SPI1_Init();
+    SwitchSpiHiZ(true);
     i2c_init();
+    //RX_Init(1, 802000, 0);
+    RX_Init(2, 803000, 1);
+    RX_Init(3, 805000, 0);
+    //RX_Init(4, 807000, 1);
+    NRF_init(1);
+    NRF_init(2);
 
-    radio_power(RF1 | RF2, DISABLE);
-    delay_ms(50);
-    radio_power(RF1 | RF2, ENABLE);
-    delay_ms(50);
+    SELF_BOOT(1);
+    RESETn(0);
+    Delay_ms(50);
+    RESETn(1);
 
-    button_reset();
-
-    init_rx();
-    res = spdif_init();
-    if (res == 0)
-    {
-        led_control(LED1, ENABLE);
-        delay_ms(500);
-    }
-    led_control(LED1, DISABLE);
-    delay_ms(500);
-    // hw_i2c_config();
-    // nvic_config();
-    res = fm_init();
     while (1)
     {
-        if (res != 0)
-            res = fm_init();
-
-        led_control(LED2, res == 0);
-        delay_ms(1000);
-        led_control(LED2, DISABLE);
-        delay_ms(1000);
+        RX_Check_PhaseLock(1);
+        RX_Check_PhaseLock(2);
+        RX_Check_PhaseLock(3);
+        RX_Check_PhaseLock(4);
+        Delay_ms(250);
     }
     return 0;
 }

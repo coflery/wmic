@@ -3,8 +3,8 @@
  *  it under the terms of the GNU General Public License version 3.
  */
 
-#ifndef _LOG_H_
-#define _LOG_H_
+#ifndef _LOG_H
+#define _LOG_H
 
 #include <stdio.h>
 

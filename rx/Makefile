@@ -44,9 +44,10 @@ vpath %.c $(SRC_DIR) $(SPL_DEVICE_SUPPORT_PATH) $(SRC_BSP_DIR)
 vpath %.s $(SRC_DIR)
 
 STARTUP=startup_stm32f0xx.s
-SRCS=system_stm32f0xx.c stm32_it.c syscalls.c \
-     main.c uart.c jtag.c delay.c gpio.c i2c.c \
-     rx.c spdif.c fm.c
+SRCS=system_stm32f0xx.c \
+delay.c  gpio.c  led.c   rx.c     spi.c       syscalls.c \
+fm.c     i2c.c   main.c  nrf.c    spdif.c     stm32_it.c \
+uart.c
 
 OBJS=$(addprefix $(OBJ_DIR),$(SRCS:.c=.o)) \
   $(addprefix $(OBJ_DIR),$(STARTUP:.s=.o))

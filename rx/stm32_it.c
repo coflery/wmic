@@ -31,6 +31,11 @@
 #include <stdbool.h>
 #include "stm32_it.h"
 #include "stm32f0xx.h"
+#include "delay.h"
+#include "led.h"
+#include "rx.h"
+#include "gpio.h"
+#include "spi.h"
 
 /** @addtogroup Template_Project
   * @{
@@ -40,8 +45,12 @@
 /* Private define ------------------------------------------------------------*/
 /* Private macro -------------------------------------------------------------*/
 /* Private variables ---------------------------------------------------------*/
-extern bool RX1_IRQ;
-extern bool RX2_IRQ;
+extern bool NRF1_IRQ;
+extern bool NRF2_IRQ;
+extern bool KEY1_IRQ;
+extern bool KEY2_IRQ;
+extern bool KEY3_IRQ;
+
 /* Private function prototypes -----------------------------------------------*/
 /* Private functions ---------------------------------------------------------*/
 
@@ -97,6 +106,7 @@ void PendSV_Handler(void)
 void SysTick_Handler(void)
 {
   SystemTime++;
+  led_task();
 }
 
 /******************************************************************************/
@@ -160,9 +170,13 @@ void EXTI0_1_IRQHandler(void)
 {
   if (EXTI_GetITStatus(EXTI_Line0) != RESET)
   {
-    RX1_IRQ = true;
-    /* Clear the EXTI line 0 pending bit */
+    RX_IRQ(4);
     EXTI_ClearITPendingBit(EXTI_Line0);
+  }
+  else if (EXTI_GetITStatus(EXTI_Line1) != RESET)
+  {
+    RX_IRQ(3);
+    EXTI_ClearITPendingBit(EXTI_Line1);
   }
 }
 
@@ -173,10 +187,14 @@ void EXTI0_1_IRQHandler(void)
   */
 void EXTI2_3_IRQHandler(void)
 {
-  if (EXTI_GetITStatus(EXTI_Line3) != RESET)
+  if (EXTI_GetITStatus(EXTI_Line2) != RESET)
   {
-    RX2_IRQ = true;
-    /* Clear the EXTI line 3 pending bit */
+    NRF1_IRQ = true;
+    EXTI_ClearITPendingBit(EXTI_Line2);
+  }
+  else if (EXTI_GetITStatus(EXTI_Line3) != RESET)
+  {
+    NRF2_IRQ = true;
     EXTI_ClearITPendingBit(EXTI_Line3);
   }
 }
@@ -190,14 +208,33 @@ void EXTI4_15_IRQHandler(void)
 {
   if (EXTI_GetITStatus(EXTI_Line5) != RESET)
   {
-    /* Clear the EXTI line 3 pending bit */
+    RX_IRQ(2);
     EXTI_ClearITPendingBit(EXTI_Line5);
-    NVIC_SystemReset();
   }
-  if (EXTI_GetITStatus(EXTI_Line6) != RESET)
+  else if (EXTI_GetITStatus(EXTI_Line7) != RESET)
   {
-    /* Clear the EXTI line 3 pending bit */
-    EXTI_ClearITPendingBit(EXTI_Line6);
+    KEY1_IRQ = true;
+    EXTI_ClearITPendingBit(EXTI_Line7);
+  }
+  else if (EXTI_GetITStatus(EXTI_Line8) != RESET)
+  {
+    KEY2_IRQ = true;
+    EXTI_ClearITPendingBit(EXTI_Line8);
+  }
+  else if (EXTI_GetITStatus(EXTI_Line9) != RESET)
+  {
+    KEY3_IRQ = true;
+    EXTI_ClearITPendingBit(EXTI_Line9);
+  }
+  else if (EXTI_GetITStatus(EXTI_Line14) != RESET)
+  {
+    RX_IRQ(1);
+    EXTI_ClearITPendingBit(EXTI_Line14);
+  }
+  else if (EXTI_GetITStatus(EXTI_Line15) != RESET)
+  {
+    SwitchSpiHiZ(USBI_WPn());
+    EXTI_ClearITPendingBit(EXTI_Line15);
   }
 }
 
@@ -209,10 +246,5 @@ void EXTI4_15_IRQHandler(void)
 /*void PPP_IRQHandler(void)
 {
 }*/
-
-/**
-  * @}
-  */ 
-
 
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
