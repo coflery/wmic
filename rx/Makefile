@@ -1,4 +1,4 @@
-# Copyright (C) 2021 WMIC authors
+# Copyright (C) 2020-2022 Frand Ren
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 3.
 
@@ -62,7 +62,7 @@ dirs:
 $(APP).elf: $(OBJS)
 	$(CC) $(LDFLAGS) -o $@ $^ -L$(SPL_PATH) -l$(SPL_LIB) \
 	  -T$(LINKER_SCRIPT)
-	$(OBJCOPY) --pad-to 0x08008000 -O ihex $(APP).elf $(APP).hex
+	$(OBJCOPY) -O ihex $(APP).elf $(APP).hex
 	$(OBJCOPY) -O binary $(APP).elf $(APP).bin
 	$(OBJDUMP) -St $(APP).elf > $(APP).lst
 	$(SIZE) $(APP).elf
