@@ -56,7 +56,7 @@ const uint8_t rx_reg_val[38][4] =
         {0xFF, 0xFF, 0xFF, 0xFF}, //REG34, [30:24]=0xFFFF EQ15-EQ1 off;[15:0] howing threshold
         {0x00, 0x00, 0x00, 0x00}, //REG35, [23:0]=350 freq-shift at up 1Hz,enable it set REG36[3]=0
         {0x0C, 0x00, 0x60, 0xC8}, //REG36, [31]=0 MSB;[30:28]=b000 I2S mode;[27]=0 I2S-Master;[26]=1 I2S on;[13]=1 analog output on;[7]DUF on;[6]reverb off;[3]=0 freq-shift on for anti-howling
-        {0x3E, 0x00, 0x8F, 0x36}, //REG37, [31:25]LRCK-48kHz;[24:13]BCLK-3.072MHz;[12:8]16bit
+        {0x3E, 0x00, 0x97, 0x36}, //REG37, [31:25]LRCK-48kHz;[24:13]BCLK-3.072MHz;[12:8]24bit
         {0x40, 0xD7, 0xD5, 0xF7}, //REG38, [23:0] synchronize word
         {0x00, 0x00, 0x00, 0x00}, //REG39, [31:0] ID code,pair with transmitter
         {0x28, 0x02, 0x85, 0x64}, //REG3A,
@@ -636,12 +636,12 @@ uint8_t RX_Init(uint8_t index, uint32_t freq, bool DataOutAtLRCK)
   RX_Set_LRCK_DataOut(DataOutAtLRCK);
 
   //blink for write rx regs done
-  for (uint8_t i = 0; i < 6; i++)
+  for (uint8_t i = 0; i < 2; i++)
   {
     RX_GPIO4_Set(RX_GPIO4_High);
-    Delay_ms(10 * i);
+    Delay_ms(50);
     RX_GPIO4_Set(RX_GPIO4_Low);
-    Delay_ms(10 * i);
+    Delay_ms(50);
   }
   RX_GPIO4_Set(RX_GPIO4_Function2);
 

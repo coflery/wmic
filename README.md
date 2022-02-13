@@ -1,2 +1,2 @@
 # wmic
-A UHF digital wireless micphone and in-ear monitor system
+A UHF digital wireless microphone and in-ear monitor system
