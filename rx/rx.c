@@ -51,7 +51,7 @@ const uint8_t rx_reg_val[38][4] =
         {0x00, 0x00, 0x2E, 0x91}, //REG2F,|
         {0x40, 0x40, 0x40, 0x40}, //REG30, GPIO3-O,GPIO2-O,GPIO1-I,GPIO0-I;0x40 for fun2 output,0x3C for fun3 pull-up input
         {0xD9, 0x02, 0x00, 0x40}, //REG31, [31:30]=b11 48kHz;[22:20]GPIO4-extbit;[19:17]GPIO3-RSSI;[16:14]GPIO2-PCM_DATA;[13:11]GPIO1-PCM_BCLK;[10:8]GPIO0-PCM_LRCK;[7:0]GPIO4-output
-        {0x20, 0xFF, 0xEF, 0x17}, //REG32, [10]=1 auto-mute off
+        {0x20, 0xFF, 0xEF, 0x07}, //REG32, [10]=1 auto-mute off
         {0x10, 0x00, 0x40, 0x00}, //REG33, [31:16] rssi high threshold;[15:0] rssi low threshold
         {0xFF, 0xFF, 0xFF, 0xFF}, //REG34, [30:24]=0xFFFF EQ15-EQ1 off;[15:0] howing threshold
         {0x00, 0x00, 0x00, 0x00}, //REG35, [23:0]=350 freq-shift at up 1Hz,enable it set REG36[3]=0
