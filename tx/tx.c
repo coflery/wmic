@@ -1,9 +1,9 @@
 #include "delay.h"
 #include "tx.h"
 
-#define I2C_ADDRESS 0x21
-#define TX_Chip_ID 0x21
-#define INIT_FAIL_TIME 20
+#define I2C_ADDRESS 0x25
+#define TX_Chip_ID 0x9531
+#define RETRY_COUNT 80
 
 uint8_t analog_reg_val[12][4]; //Analog register values,
 uint8_t reg_val[4];            //Temporatory register values
@@ -11,57 +11,45 @@ uint8_t bakup_reg_val[4];
 
 BK bk9531;
 
-uint8_t tx_reg_val[48][4] =
-{
-        {0x1C, 0x44, 0x0C, 0x88}, //REG0
+const uint8_t tx_reg_val[35][4] =
+    {
+        {0x1E, 0x44, 0x0C, 0x88}, //REG0
         {0x04, 0xCF, 0x00, 0x57}, //REG1
         {0x89, 0x90, 0xE0, 0x2F}, //REG2
-        {0xB4, 0x22, 0x46, 0xFF}, //REG3 	,update REG9[28],[31]=0-->1,140414;
+        {0x34, 0x12, 0x06, 0xFF}, //REG3
         {0x51, 0x88, 0x00, 0x44}, //REG4
         {0x00, 0x28, 0x03, 0x80}, //REG5
-        {0x5B, 0xED, 0xFB, 0x00}, //REG6
-        {0x1C, 0x40, 0x00, 0x00}, //REG7
-        {0x00, 0x08, 0x01, 0x00}, //REG8	,updated,140416
-        {0x00, 0x00, 0x00, 0x03}, //REG9
-        {0x05, 0x8C, 0x30, 0x30}, //REGA	,update REG9[27:25]=0-->2,140414; TX power
-        {0x00, 0x06, 0xC3, 0xFF}, //REGB
-        {0xE4, 0x16, 0x95, 0x21}, //REG10
-        {0x34, 0xB0, 0x02, 0x91}, //REG11
-        {0x00, 0x00, 0x00, 0x40}, //REG12
-        {0x00, 0x00, 0x00, 0x00}, //REG13
-        {0x00, 0x00, 0x00, 0x00}, //REG19
-        {0x00, 0x00, 0x42, 0xC0}, //REG1A
-        {0x53, 0x02, 0x00, 0x00}, //REG1B
-        {0x04, 0x02, 0x03, 0xFF}, //REG1C
-        {0x58, 0x02, 0x6C, 0x02}, //REG1D
-        {0x0f, 0x0b, 0x32, 0x1b}, //REG1E
-        {0x00, 0x00, 0x00, 0x80}, //REG1F
-        {0x00, 0x00, 0x93, 0xA0}, //REG20
-        {0x00, 0xD7, 0xD5, 0xF7}, //REG21
-        {0x00, 0x00, 0x00, 0x00}, //REG22
-        {0x7F, 0x7F, 0x00, 0xA0}, //REG23
-        {0x00, 0x00, 0x70, 0x50}, //REG25
-        {0x0F, 0x80, 0x1E, 0x04}, //REG26
-        {0x40, 0x40, 0x40, 0x40}, //REG27
-        {0x00, 0x00, 0x00, 0x40}, //REG28
-        {0x03, 0xF0, 0x64, 0x00}, //REG29
-        {0x01, 0x00, 0x00, 0x00}, //REG30
-        {0x07, 0x05, 0x04, 0x02}, //REG31
-        {0x12, 0x0F, 0x0C, 0x0A}, //REG32
-        {0x22, 0x1E, 0x1A, 0x16}, //REG33
-        {0x35, 0x30, 0x2B, 0x26}, //REG34
-        {0x4B, 0x45, 0x40, 0x3A}, //REG35
-        {0x63, 0x5D, 0x57, 0x51}, //REG36
-        {0x7C, 0x76, 0x70, 0x69}, //REG37
-        {0x96, 0x8F, 0x89, 0x83}, //REG38
-        {0xAE, 0xA8, 0xA2, 0x9C}, //REG39
-        {0xC5, 0xBF, 0xBA, 0xB4}, //REG3A
-        {0xD9, 0xD4, 0xCF, 0xCA}, //REG3B
-        {0xE9, 0xE5, 0xE1, 0xDD}, //REG3C
-        {0xF5, 0xF3, 0xF0, 0xED}, //REG3D
-        {0xFD, 0xFB, 0xFA, 0xF8}, //REG3E
-        {0xFF, 0xFF, 0xFF, 0xFE}, //REG3F
+        {0x5B, 0xED, 0xFB, 0x00}, //REG6 ,update REG6[16:13]=0x6-->0xF,140425;
+        {0x1E, 0x40, 0x00, 0x00}, //REG7
+        {0x00, 0x08, 0x01, 0x00}, //REG8
+        {0x00, 0x00, 0x7E, 0xFF}, //REG9
+        {0x0F, 0x3A, 0x40, 0x40}, //REGA ,update U-band tx power for 10dBm,160104;
+        {0x00, 0x06, 0xC3, 0xFF}, //REGB ,update REGB[19:16]=0-->6,140414;
+        {0x00, 0x00, 0x00, 0x08}, //REGC
+        {0x3A, 0x98, 0x00, 0x00}, //REGD
+        {0x28, 0x28, 0x28, 0x28}, //REG30
+        {0xD1, 0x00, 0x00, 0x28}, //REG31
+        {0x10, 0x06, 0x00, 0x64}, //REG32
+        {0x48, 0x80, 0x8D, 0x82}, //REG33
+        {0x0F, 0x02, 0x11, 0x08}, //REG34
+        {0x70, 0x50, 0x00, 0x80}, //REG35
+        {0x0F, 0x80, 0x1E, 0x04}, //REG36
+        {0x00, 0x00, 0x00, 0x00}, //REG37
+        {0x00, 0x00, 0x00, 0x00}, //REG38
+        {0x03, 0xD7, 0xD5, 0xF7}, //REG39
+        {0xC0, 0x25, 0x00, 0x74}, //REG3A
+        {0x95, 0x25, 0x00, 0x3A}, //REG3B
+        {0x95, 0x25, 0x00, 0x3B}, //REG3C
+        {0x95, 0x25, 0x00, 0x3C}, //REG3D
+        {0x00, 0xF8, 0x67, 0xC3}, //REG3E
+        {0x80, 0x0F, 0x00, 0x00}, //REG3F
+        {0x00, 0x00, 0x95, 0x31}, //REG70
+        {0x18, 0xA4, 0x08, 0x10}, //REG71
+        {0x00, 0x00, 0x00, 0x00}, //REG72
+        {0x00, 0x07, 0x00, 0x51}, //REG77
+        {0x00, 0x00, 0x00, 0x08}, //REG78
 };
+
 uint8_t TX_I2C_Read(uint8_t reg, uint8_t *pBuf)
 {
   uint8_t res = 0;
@@ -181,7 +169,6 @@ bool TX_Set_I2C_Bus(uint8_t index)
 
 uint8_t TX_Init(uint32_t freq)
 {
-  uint8_t i;
   uint8_t addr;
 
   //选择总线
@@ -191,31 +178,35 @@ uint8_t TX_Init(uint32_t freq)
   }
   bk9531.bus_busy = true;
 
-  for (i = 0; i <= INIT_FAIL_TIME; i++)
+  //check if chip is online
+  for (uint8_t i = 0; i < RETRY_COUNT; i++)
   {
-    Delay_ms(20);
-    TX_I2C_Read(0x10, reg_val);
-    if (reg_val[3] != TX_Chip_ID)
-      continue;
-    break;
+    //read chipID
+    if (TX_I2C_Read(0x70, reg_val))
+      continue; //busy:chip reading i2c eeprom
+
+    uint16_t chipID = reg_val[2] << 8 | reg_val[3];
+    if (chipID == TX_Chip_ID)
+      break;
+    if (i + 1 == RETRY_COUNT)
+      return 3;
+    Delay_ms(50);
   }
 
-  if (reg_val[3] != TX_Chip_ID)
-    return 1;
-
-  for (i = 1; i <= 48; i++)
+  for (uint8_t i = 0; i < 35; i++)
   {
-    if (i <= 12)
-      addr = i - 1;
-    else if (i <= 16)
-      addr = 3 + i;
-    else if (i <= 27)
-      addr = 8 + i;
-    else if (i <= 32)
-      addr = 9 + i;
-    else if (i <= 48)
-      addr = 15 + i;
-    TX_I2C_Write(addr, &tx_reg_val[i - 1][0]); //tx_reg_val=tx_48k_vband values
+    if (i <= 0x0D)
+      addr = i;
+    else if (i <= 0x1D)
+      addr = 34 + i;
+    else if (i <= 0x20)
+      addr = 82 + i;
+    else if (i <= 0x22)
+      addr = 86 + i;
+    if (TX_I2C_Write(addr, (uint8_t *)tx_reg_val[i]))
+    {
+      return 4;
+    }
   }
 
   TX_Set_Band_And_Frequency(freq);
@@ -228,65 +219,83 @@ uint8_t TX_Init(uint32_t freq)
 
 void TX_RF_UnLock_Check()
 {
-  TX_I2C_Read(0x19, reg_val);
-  if (reg_val[3] & 0x0c) //TX unlock
+  TX_I2C_Read(0x31, reg_val);
+  if (reg_val[3] & 0x01) //TX unlock
   {
     TX_Trigger();
   }
 }
 
-/*
-*    函 数 名: TX_Set_Band_And_Frequency
-*    功能说明: 设置发射的频率
-*    形    参: freq：要设置的频率(单位:kHz)
-*    返 回 值: 0:成功 其他:频率超过范围
-*/
-uint8_t TX_Set_Band_And_Frequency(uint64_t freq)
+/**
+ * @brief 设置发射的频率(160-270MHz 500-980MHz)
+ * @param freq 要设置的频率(单位:kHz)
+ * @return uint8_t 0:成功 其他:频率超过范围
+ */
+uint8_t TX_Set_Band_And_Frequency(uint32_t freq)
 {
-  //Only for UHF
-  if(freq < 500000 || freq > 980000)
+  RF select;
+  uint8_t R03_21_20;
+  uint8_t R03_15_13;
+  uint32_t R0D;
+
+  if (freq >= 160000 && freq <= 178000)
+    select = V160_178;
+  else if (freq > 178000 && freq <= 270000)
+    select = V178_270;
+  else if (freq >= 500000 && freq <= 710000)
+    select = U500_710;
+  else if (freq > 710000 && freq <= 980000)
+    select = U710_980;
+  else
     return 1;
 
-  analog_reg_val[3][1] &= ~0x20; //REG3[21]=0
-  analog_reg_val[3][1] |= 0x10;  //REG3[20]=1
-  analog_reg_val[3][2] &= ~0xE0; //REG3[15:13]=0
-  if(freq < 750800)
-    analog_reg_val[3][2] |= 0x20;  //REG3[15:13]=1	// frequency < 750.8M reserved the line,else comment it.
+  //R03 R0D
+  if (select == V160_178)
+  {
+    R03_21_20 = 0b10;
+    R03_15_13 = 0b010;
+    R0D = (uint32_t)((uint64_t)freq * 24 * 0x800000 / 24576);
+  }
+  else if (select == V178_270)
+  {
+    R03_21_20 = 0b10;
+    R03_15_13 = 0b001;
+    R0D = (uint32_t)((uint64_t)freq * 16 * 0x800000 / 24576);
+  }
+  else if (select == U500_710)
+  {
+    R03_21_20 = 0b01;
+    R03_15_13 = 0b001;
+    R0D = (uint32_t)((uint64_t)freq * 6 * 0x800000 / 24576);
+  }
+  else if (select == U710_980)
+  {
+    R03_21_20 = 0b01;
+    R03_15_13 = 0b000;
+    R0D = (uint32_t)((uint64_t)freq * 4 * 0x800000 / 24576);
+  }
+
+  analog_reg_val[3][1] &= ~0x30; //REG3[21:20]=0b00
+  analog_reg_val[3][2] &= ~0xE0; //REG3[15:13]=0b000
+  analog_reg_val[3][1] |= R03_21_20 << 4;
+  analog_reg_val[3][2] |= R03_15_13 << 5;
   TX_I2C_Write(0x03, analog_reg_val[3]);
 
-  uint32_t value;
-  if (freq >= 160000 && freq <= 178000)
-    value = (uint32_t)(freq * 24 * 0x800000 / 24576);
-  else if (freq > 178000 && freq <= 270000)
-    value = (uint32_t)(freq * 16 * 0x800000 / 24576);
-  else if (freq >= 500000 && freq <= 710000)
-    value = (uint32_t)(freq * 6 * 0x800000 / 24576);
-  else if (freq > 710000 && freq <= 980000)
-    value = (uint32_t)(freq * 4 * 0x800000 / 24576);
-  else
-    return 2;
-
-  reg_val[0] = (value >> 24) & 0xff;
-  reg_val[1] = (value >> 16) & 0xff;
-  reg_val[2] = (value >> 8) & 0xff;
-  reg_val[3] = (value >> 0) & 0xff;
-
-  //TX freq set 700MHz
-  // reg_val[0] = 0x55;
-  // reg_val[1] = 0x73;
-  // reg_val[2] = 0x00;
-  // reg_val[3] = 0x00;
-  TX_I2C_Write(0x1B, reg_val);
+  reg_val[0] = R0D >> 24;
+  reg_val[1] = R0D >> 16;
+  reg_val[2] = R0D >> 8;
+  reg_val[3] = R0D >> 0;
+  TX_I2C_Write(0x0D, reg_val);
   return 0;
 }
 
 void TX_Reset_Chip()
 {
-  TX_I2C_Read(0x1a, reg_val);
-  reg_val[3] &= ~0x80; //REG1A[7]=0
-  TX_I2C_Write(0x1a, reg_val);
-  reg_val[3] |= 0x80; //REG1A[7]=1
-  TX_I2C_Write(0x1a, reg_val);
+  TX_I2C_Read(0x3F, reg_val);
+  reg_val[1] &= ~0x08; //REG3F[19]=0
+  TX_I2C_Write(0x3F, reg_val);
+  reg_val[1] |= 0x08; //REG3F[19]=1
+  TX_I2C_Write(0x3F, reg_val);
 }
 
 //TX mode,trigger chip to calibrate
@@ -300,17 +309,17 @@ void TX_Trigger()
 
   //Set output power=low for tx_trigger
   analog_reg_val[10][3] = 0x00; //REGA[7:0]=0
-  TX_I2C_Write(0x0a, analog_reg_val[10]);
+  TX_I2C_Write(0x0A, analog_reg_val[10]);
 
   //Set ddf_en=0 for tx_trigger
-  TX_I2C_Read(0x1f, reg_val);
-  reg_val[3] &= ~0x80; //REG1F[7]=0
-  TX_I2C_Write(0x1f, reg_val);
+  TX_I2C_Read(0x35, reg_val);
+  reg_val[3] &= ~0x80; //REG35[7]=0
+  TX_I2C_Write(0x35, reg_val);
 
   //Set tx_en=0 for tx_trigger
-  TX_I2C_Read(0x20, reg_val);
-  reg_val[3] &= ~0x80; //REG20[7]=0
-  TX_I2C_Write(0x20, reg_val);
+  TX_I2C_Read(0x39, reg_val);
+  reg_val[0] &= ~0x01; //REG39[24]=0
+  TX_I2C_Write(0x39, reg_val);
 
   //Enable calibration clock
   analog_reg_val[7][0] |= 0x02;  //REG7[25]=1
@@ -336,17 +345,17 @@ void TX_Trigger()
   TX_I2C_Write(0x07, analog_reg_val[7]);
 
   //Set ddf_en=1 for normal mode
-  TX_I2C_Read(0x1f, reg_val);
-  reg_val[3] |= 0x80; //REG1F[7]=1
-  TX_I2C_Write(0x1f, reg_val);
+  TX_I2C_Read(0x35, reg_val);
+  reg_val[3] |= 0x80; //REG35[7]=1
+  TX_I2C_Write(0x35, reg_val);
 
   //Set tx_en=1 for normal mode
-  TX_I2C_Read(0x20, reg_val);
-  reg_val[3] |= 0x80; //REG20[7]=1
-  TX_I2C_Write(0x20, reg_val);
+  TX_I2C_Read(0x39, reg_val);
+  reg_val[0] |= 0x01; //REG39[24]=1
+  TX_I2C_Write(0x39, reg_val);
 
   //Recall default output power
-  TX_I2C_Write(0x0a, bakup_reg_val);
+  TX_I2C_Write(0x0A, bakup_reg_val);
 }
 
 void TX_Write_ID(uint8_t id_dat)
@@ -355,14 +364,14 @@ void TX_Write_ID(uint8_t id_dat)
   reg_val[1] = 0x00;
   reg_val[2] = 0x00;
   reg_val[3] = id_dat;
-  TX_I2C_Write(0x22, reg_val);
+  TX_I2C_Write(0x38, reg_val);
 }
 
 void TX_Write_UserData(uint8_t dat)
 {
-  reg_val[0] = 0x00;
-  reg_val[1] = 0x00;
-  reg_val[2] = dat;
-  reg_val[3] = 0xA0;
-  TX_I2C_Write(0x20, reg_val);
+  reg_val[0] = 0xC0;
+  reg_val[1] = 0x25;
+  reg_val[2] = 0x00;
+  reg_val[3] = dat;
+  TX_I2C_Write(0x3A, reg_val);
 }

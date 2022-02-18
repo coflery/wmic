@@ -8,10 +8,18 @@ typedef struct
     bool bus_busy;
 } BK;
 
+typedef enum
+{
+    V160_178,
+    V178_270,
+    U500_710,
+    U710_980
+} RF;
+
 uint8_t TX_Init(uint32_t freq);
 void TX_Write_ID(uint8_t id_dat);
 void TX_Write_UserData(uint8_t dat);
-uint8_t TX_Set_Band_And_Frequency(uint64_t freq);
+uint8_t TX_Set_Band_And_Frequency(uint32_t freq);
 void TX_Trigger(void);
 void TX_Reset_Chip(void);
 void TX_RF_UnLock_Check(void);
