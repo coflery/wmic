@@ -1,14 +1,15 @@
 #include "delay.h"
 #include "tx.h"
-#include "i2c.h"
 
-#define I2C_SLAVE_ADDRESS 0x21
+#define I2C_ADDRESS 0x21
 #define TX_Chip_ID 0x21
 #define INIT_FAIL_TIME 20
 
 uint8_t analog_reg_val[12][4]; //Analog register values,
 uint8_t reg_val[4];            //Temporatory register values
 uint8_t bakup_reg_val[4];
+
+BK bk9531;
 
 uint8_t tx_reg_val[48][4] =
 {
@@ -61,11 +62,134 @@ uint8_t tx_reg_val[48][4] =
         {0xFD, 0xFB, 0xFA, 0xF8}, //REG3E
         {0xFF, 0xFF, 0xFF, 0xFE}, //REG3F
 };
+uint8_t TX_I2C_Read(uint8_t reg, uint8_t *pBuf)
+{
+  uint8_t res = 0;
+  if (reg <= 0x0B) //Analog registers not read directly from chip,recalled from analog_reg_val[][]
+  {
+    pBuf[0] = analog_reg_val[reg][0];
+    pBuf[1] = analog_reg_val[reg][1];
+    pBuf[2] = analog_reg_val[reg][2];
+    pBuf[3] = analog_reg_val[reg][3];
+    return 0;
+  }
+  else
+  {
+    /* Send START condition */
+    if (I2C_BUS_SendStart(&bk9531.device))
+    {
+      /* Bus bus busy*/
+      res = 1;
+    }
+
+    /* Send slave device address */
+    if (I2C_BUS_SendByte(&bk9531.device, I2C_ADDRESS) == I2C_NOACK)
+    {
+      res = 2;
+      goto END;
+    }
+
+    /* Send the slave device reg address to read */
+    if (I2C_BUS_SendByte(&bk9531.device, I2C_RD((reg << 1))) == I2C_NOACK)
+    {
+      res = 3;
+      goto END;
+    }
+
+    uint8_t len = 4;
+    /* Read regs data */
+    for (uint8_t i = 0; i < len; i++)
+    {
+      *pBuf = I2C_BUS_ReceiveByte(&bk9531.device, (i + 1) == len ? I2C_NOACK : I2C_ISACK);
+      pBuf++;
+    }
+  }
+END:
+  /* Send STOP Condition */
+  I2C_BUS_SendStop(&bk9531.device);
+  return res;
+}
+
+uint8_t TX_I2C_Write(uint8_t reg, uint8_t *pBuf)
+{
+  uint8_t res = 0;
+  if (reg <= 0x0B) //Analog registers saved by analog_reg_val[][] for read operation
+  {
+    analog_reg_val[reg][0] = pBuf[0];
+    analog_reg_val[reg][1] = pBuf[1];
+    analog_reg_val[reg][2] = pBuf[2];
+    analog_reg_val[reg][3] = pBuf[3];
+  }
+
+  /* Send START condition */
+  if (I2C_BUS_SendStart(&bk9531.device))
+  {
+    /* Bus bus busy*/
+    res = 1;
+  }
+
+  /* Send slave device address */
+  if (I2C_BUS_SendByte(&bk9531.device, I2C_ADDRESS) == I2C_NOACK)
+  {
+    res = 2;
+    goto END;
+  }
+
+  /* Send the slave device reg address to write */
+  if (I2C_BUS_SendByte(&bk9531.device, I2C_WR(reg << 1)) == I2C_NOACK)
+  {
+    res = 3;
+    goto END;
+  }
+
+  /* Send data bytes to write */
+  for (uint8_t i = 0; i < 4; i++)
+  {
+    if (I2C_BUS_SendByte(&bk9531.device, *pBuf) == I2C_NOACK)
+    {
+      res = 4;
+      goto END;
+    }
+    pBuf++;
+  }
+
+END:
+  /* Send STOP Condition */
+  I2C_BUS_SendStop(&bk9531.device);
+  return res;
+}
+
+/**
+ * @brief 根据设备号选择所在的I2C总线
+ *
+ * @param index 设备号
+ * @return true 失败
+ * @return false 成功
+ */
+bool TX_Set_I2C_Bus(uint8_t index)
+{
+  switch (index)
+  {
+  case 1:
+    bk9531.device = I2C_Bus1;
+    break;
+  default:
+    return true;
+  }
+  return false;
+}
 
 uint8_t TX_Init(uint32_t freq)
 {
   uint8_t i;
   uint8_t addr;
+
+  //选择总线
+  if (TX_Set_I2C_Bus(1))
+  {
+    return 1;
+  }
+  bk9531.bus_busy = true;
 
   for (i = 0; i <= INIT_FAIL_TIME; i++)
   {
@@ -97,7 +221,8 @@ uint8_t TX_Init(uint32_t freq)
   TX_Set_Band_And_Frequency(freq);
   TX_Reset_Chip();
   TX_Trigger();
-  
+
+  bk9531.bus_busy = false;
   return 0;
 }
 
@@ -260,73 +385,4 @@ void TX_Write_28kHz_SampleMode(void)
   TX_I2C_Read(0x20, reg_val);
   reg_val[3] |= 0x08; //REG20[3]=1
   TX_I2C_Write(0x20, reg_val);
-}
-
-void TX_I2C_Write(uint8_t reg, uint8_t *pBuf)
-{
-  if (reg <= 0x0b) //Analog registers saved by analog_reg_val[][] for read operation
-  {
-    analog_reg_val[reg][0] = pBuf[0];
-    analog_reg_val[reg][1] = pBuf[1];
-    analog_reg_val[reg][2] = pBuf[2];
-    analog_reg_val[reg][3] = pBuf[3];
-  }
-
-  /* Send START condition */
-  I2C_Start();
-
-  /* Send slave device address */
-  I2C_WriteByte(I2C_SLAVE_ADDRESS);
-  while (I2C_CheckAck());
-
-  /* Send the slave device reg address to write */
-  I2C_WriteByte((reg << 1));
-  while (I2C_CheckAck());
-
-  /* Send data bytes to write */
-  for (uint8_t i = 0; i < 4; i++)
-  {
-    I2C_WriteByte(pBuf[i]);
-    while (I2C_CheckAck());
-  }
-
-  /* Send STOP Condition */
-  I2C_Stop();
-}
-
-void TX_I2C_Read(uint8_t reg, uint8_t *pBuf)
-{
-  uint8_t i;
-  if (reg <= 0x0b) //Analog registers not read directly from chip,recalled from analog_reg_val[][]
-  {
-    pBuf[0] = analog_reg_val[reg][0];
-    pBuf[1] = analog_reg_val[reg][1];
-    pBuf[2] = analog_reg_val[reg][2];
-    pBuf[3] = analog_reg_val[reg][3];
-  }
-  else
-  {
-    I2C_Start();
-
-    /* Send slave device address */
-    I2C_WriteByte(I2C_SLAVE_ADDRESS);
-    while (I2C_CheckAck());
-
-    /* Send the slave device reg address to read */
-    I2C_WriteByte((reg << 1) | 0x01);
-    while (I2C_CheckAck());
-
-    for (i = 0; i < 3; i++)
-    {
-      pBuf[i] = I2C_ReadByte();
-      /* Acknowledgement */
-      I2C_Ack();
-    }
-    pBuf[i] = I2C_ReadByte();
-    /* Disable Acknowledgement */
-    I2C_NAck();
-
-    /* Send STOP Condition */
-    I2C_Stop();
-  }
 }
