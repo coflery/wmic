@@ -28,10 +28,10 @@ int main(void)
     SPI1_Init();
     SwitchSpiHiZ(true);
     i2c_init();
-    //RX_Init(1, 801000, 0);
+    //RX_Init(1, 800000, 0);
     RX_Init(2, 803000, 1);
-    RX_Init(3, 805000, 0);
-    //RX_Init(4, 807000, 1);
+    RX_Init(3, 806000, 0);
+    //RX_Init(4, 809000, 1);
     NRF_init(1);
     NRF_init(2);
 
