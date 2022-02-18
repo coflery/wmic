@@ -366,23 +366,3 @@ void TX_Write_UserData(uint8_t dat)
   reg_val[3] = 0xA0;
   TX_I2C_Write(0x20, reg_val);
 }
-
-void TX_Write_28kHz_SampleMode(void)
-{
-  analog_reg_val[0][0] = 0x10; //REG0=0x10000008
-  analog_reg_val[0][1] = 0X00;
-  analog_reg_val[0][2] = 0X00;
-  analog_reg_val[0][3] = 0X08;
-  TX_I2C_Write(0x00, analog_reg_val[0]);
-
-  analog_reg_val[8][1] |= 0x04; //REG8[18]=1
-  TX_I2C_Write(0x08, analog_reg_val[8]);
-
-  TX_I2C_Read(0x1A, reg_val);
-  reg_val[2] |= 0x01; //REG1A[8]=1
-  TX_I2C_Write(0x1A, reg_val);
-
-  TX_I2C_Read(0x20, reg_val);
-  reg_val[3] |= 0x08; //REG20[3]=1
-  TX_I2C_Write(0x20, reg_val);
-}
